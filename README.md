@@ -63,8 +63,8 @@ You need **Python 3.10 or newer** and a microphone.
 ### Linux
 
 ```bash
-git clone https://github.com/<your-username>/jarvis.git
-cd jarvis
+git clone https://github.com/stinkykewchie-sudo/Jarvis.git
+cd Jarvis
 ./install.sh     # installs PortAudio, playerctl and espeak-ng, then the Python packages
 ./start.sh
 ```
