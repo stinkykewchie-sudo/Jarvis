@@ -70,8 +70,7 @@ You need **Python 3.10 or newer** and a microphone.
 2. Download this repository (green **Code** button, then **Download ZIP**) and unzip it, or `git clone` it.
 3. Double-click **`install.bat`**. It installs everything, adds **Jarvis** to your Desktop and Start menu,
    and asks whether Jarvis should start when you log in.
-4. Start Jarvis from the Desktop icon or the Start menu. **Jarvis (type commands)** in the Start menu opens
-   it in typed mode.
+4. Click the **Jarvis** icon. It opens the window; click **Listen** to talk, or type a command.
 
 ### Linux
 
@@ -139,9 +138,21 @@ code before running anything important. With 16 GB of RAM or a good graphics car
 
 Everything you teach is saved in `jarvis_memory.json`, which you can also edit by hand.
 
+### Window or terminal
+
+Clicking the **Jarvis** icon opens a window (dark chat view, a text box, a 🎤 Listen button, and a system-tray
+icon). It's the same assistant as the terminal version - every command, the coding and the voice all work the same.
+
+- **Window:** the Desktop / Start-menu icon, or `Jarvis (window).bat` on Windows, `./start-gui.sh` on Linux.
+- **Terminal:** `Start Jarvis.bat` on Windows, `./start.sh` on Linux (Start menu also has "Jarvis (voice terminal)"
+  and "Jarvis (type commands)").
+
+Closing the window hides Jarvis to the system tray, where you can reopen or quit it. Click **Listen** to talk, or
+just type in the box.
+
 ### Starting Jarvis when you log in
 
-If you said yes during install, Jarvis starts minimised each time you log in and listens for its name.
+If you said yes during install, Jarvis starts in the system tray each time you log in and listens for its name.
 It's fine if Ollama starts a little later: Jarvis checks again when you first ask it something.
 
 - **Windows:** turn it on or off with
