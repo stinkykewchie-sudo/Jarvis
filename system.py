@@ -2,7 +2,8 @@
 
 Linux support uses common desktop tools when they're installed:
   playerctl (media keys), wpctl / pactl / amixer (volume), loginctl (lock screen),
-  gnome-screenshot / spectacle / grim / scrot (screenshots), espeak-ng (fallback voice).
+  gnome-screenshot / spectacle / grim / scrot (screenshots), espeak-ng (fallback voice),
+  xdotool (browser tab control, X11 sessions only).
 """
 
 import configparser
@@ -102,10 +103,13 @@ def windows_start_apps() -> list[tuple[str, str]]:
                  "Get-StartApps | ForEach-Object { $_.Name + \"`t\" + $_.AppID }"],
                 capture_output=True, text=True, timeout=30, creationflags=subprocess.CREATE_NO_WINDOW,
             ).stdout
-            _start_apps = [tuple(line.split("\t", 1)) for line in out.splitlines() if "\t" in line
-                           and not line.split("\t", 1)[1].startswith("http")]
+            apps = [tuple(line.split("\t", 1)) for line in out.splitlines() if "\t" in line
+                    and not line.split("\t", 1)[1].startswith("http")]
         except (OSError, subprocess.TimeoutExpired):
-            _start_apps = []
+            apps = []
+        if not apps:
+            return []  # don't remember a failed lookup; try again next time
+        _start_apps = apps
     return _start_apps
 
 
@@ -361,3 +365,112 @@ def battery() -> str:
         return "This computer doesn't seem to have a battery."
     state = "and charging" if b.power_plugged else "on battery power"
     return f"The battery is at {round(b.percent)} percent, {state}."
+
+
+# ---------------------------------------------------------------------------
+# Windows and keyboard shortcuts (used to control browser tabs)
+# ---------------------------------------------------------------------------
+BROWSER_PROCESSES = {
+    "chrome", "msedge", "firefox", "firefox-bin", "brave", "opera", "vivaldi", "chromium", "chromium-browser",
+    "google-chrome", "librewolf", "waterfox", "zen", "floorp", "thorium", "arc",
+}
+WIN_KEYS = {"ctrl": 0x11, "shift": 0x10, "alt": 0x12, "tab": 0x09, "left": 0x25, "right": 0x27, "f5": 0x74,
+            "pageup": 0x21, "pagedown": 0x22, **{c: ord(c.upper()) for c in "abcdefghijklmnopqrstuvwxyz0123456789"}}
+X_KEYS = {"tab": "Tab", "left": "Left", "right": "Right", "f5": "F5", "pageup": "Page_Up", "pagedown": "Page_Down"}
+
+
+def is_browser(process_name: str) -> bool:
+    return Path(process_name).stem.lower() in BROWSER_PROCESSES
+
+
+def hotkey(*keys: str) -> bool:
+    """Press a key combination, e.g. hotkey("ctrl", "w")."""
+    if WINDOWS:
+        import ctypes
+
+        user32 = ctypes.windll.user32
+        codes = [WIN_KEYS[k] for k in keys]
+        for code in codes:
+            user32.keybd_event(code, 0, 0, 0)
+        for code in reversed(codes):
+            user32.keybd_event(code, 0, 2, 0)
+        return True
+    return _run("xdotool", "key", "--clearmodifiers", "+".join(X_KEYS.get(k, k) for k in keys))
+
+
+def _process_name(pid: int) -> str:
+    try:
+        return psutil.Process(pid).name()
+    except psutil.Error:
+        return ""
+
+
+def _xdotool(*args: str) -> str:
+    if not shutil.which("xdotool"):
+        return ""
+    try:
+        return subprocess.run(["xdotool", *args], capture_output=True, text=True, timeout=5).stdout.strip()
+    except (OSError, subprocess.TimeoutExpired):
+        return ""
+
+
+def active_window() -> tuple[int, str, str] | None:
+    """(window id, title, process name) of the window in front, or None."""
+    if WINDOWS:
+        import ctypes
+        from ctypes import wintypes
+
+        user32 = ctypes.windll.user32
+        hwnd = user32.GetForegroundWindow()
+        if not hwnd:
+            return None
+        buf = ctypes.create_unicode_buffer(user32.GetWindowTextLengthW(hwnd) + 1)
+        user32.GetWindowTextW(hwnd, buf, len(buf))
+        pid = wintypes.DWORD()
+        user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+        return hwnd, buf.value, _process_name(pid.value)
+    wid = _xdotool("getactivewindow")
+    if not wid.isdigit():
+        return None
+    pid = _xdotool("getwindowpid", wid)
+    return int(wid), _xdotool("getwindowname", wid), _process_name(int(pid)) if pid.isdigit() else ""
+
+
+def find_browser_window() -> int | None:
+    """The front-most browser window, or None."""
+    if WINDOWS:
+        import ctypes
+        from ctypes import wintypes
+
+        user32 = ctypes.windll.user32
+        found: list[int] = []
+
+        @ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+        def visit(hwnd, _):
+            if user32.IsWindowVisible(hwnd) and user32.GetWindowTextLengthW(hwnd) > 0:
+                pid = wintypes.DWORD()
+                user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+                if is_browser(_process_name(pid.value)):
+                    found.append(hwnd)
+                    return False  # windows are listed front to back, so the first match wins
+            return True
+
+        user32.EnumWindows(visit, 0)
+        return found[0] if found else None
+    ids = _xdotool("search", "--onlyvisible", "--class", "firefox|chrome|chromium|brave|edge|opera|vivaldi|librewolf|zen")
+    ids = [i for i in ids.split() if i.isdigit()]
+    return int(ids[-1]) if ids else None
+
+
+def activate_window(wid: int) -> bool:
+    if WINDOWS:
+        import ctypes
+
+        user32 = ctypes.windll.user32
+        if user32.IsIconic(wid):
+            user32.ShowWindow(wid, 9)  # restore if minimised
+        user32.keybd_event(0x12, 0, 0, 0)  # tapping Alt lets us take focus from the console
+        user32.keybd_event(0x12, 0, 2, 0)
+        user32.SetForegroundWindow(wid)
+        return user32.GetForegroundWindow() == wid
+    return _run("xdotool", "windowactivate", "--sync", str(wid))

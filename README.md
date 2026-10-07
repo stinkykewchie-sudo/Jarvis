@@ -1,7 +1,8 @@
 # Jarvis
 
 An open-source voice assistant for **Windows and Linux** that runs on your own computer.
-Say "Jarvis", then a command. Speech recognition, the voice, and the optional AI chat all run locally,
+Say "Jarvis", then a command. It controls your apps and browser tabs, answers questions, runs terminal commands,
+and writes and fixes code for you. Speech recognition, the voice and the AI all run locally,
 with no accounts, no API keys and no cloud AI.
 
 ```
@@ -19,6 +20,9 @@ Jarvis: That's 12.
 |---|---|
 | "open Spotify", "launch Steam", "open notepad", "go to github.com" | Opens apps (from your Start menu or app menu) and websites |
 | "close Discord" | Asks the app to close, so it can still prompt you to save |
+| "open a new tab to YouTube", "open reddit.com in a new tab", "new tab" | Opens browser tabs |
+| "close this tab", "close the YouTube tab", "close the last 3 tabs", "reopen the last closed tab" | Closes tabs, including by name |
+| "switch to the Gmail tab", "next tab", "refresh the page", "go back" | Moves around your tabs |
 | "play lo-fi beats on YouTube", "search for pizza near me" | Opens YouTube or Google results in your browser |
 | "pause", "next song", "previous track", "mute" | Controls whatever music or video is playing |
 | "turn the volume up a lot", "set the volume to 40 percent" | Changes the system volume |
@@ -29,6 +33,11 @@ Jarvis: That's 12.
 | "what time is it", "what's the date", "how much battery do I have" | Quick facts |
 | "lock the computer", "take a screenshot" | System actions |
 | "tell me a joke", "what can you do" | Small talk and help |
+| "write a Python script that renames my photos by date", "make a snake game in Python" | Writes the code, saves it, opens it, and runs it if you say yes |
+| "make the game faster", "fix it", "run it again" | Changes, fixes or re-runs the last program |
+| "use the terminal to find my IP address", "show my disk space in the terminal" | Works out the command, shows it, asks, runs it and tells you the answer |
+| "how do I reverse a list in Python?" | Explains out loud and puts the code on screen |
+| "when I say study time, open my school website", "remember my school website is canvas dot com", "save that as check my IP" | Teaches Jarvis your own commands and sites |
 | Anything else ("why is the sky blue?") | Answered by a local AI model, if you install Ollama (optional) |
 
 After Jarvis answers you have 8 seconds to follow up without saying "Jarvis" again.
@@ -43,6 +52,7 @@ Everything is open source:
 | Speech recognition | [faster-whisper](https://github.com/SYSTRAN/faster-whisper) running OpenAI's [Whisper](https://github.com/openai/whisper) model | MIT |
 | Voice | [Piper](https://github.com/OHF-Voice/piper1-gpl) neural text-to-speech | GPL-3.0 |
 | Local AI chat (optional) | [Ollama](https://github.com/ollama/ollama) running [Qwen3](https://github.com/QwenLM/Qwen3) | MIT / Apache-2.0 |
+| Local coding AI (optional) | [Qwen2.5-Coder](https://github.com/QwenLM/Qwen2.5-Coder) through Ollama | Apache-2.0 |
 | Microphone and audio | [python-sounddevice](https://github.com/spatialaudio/python-sounddevice) | MIT |
 | Weather (optional) | [Open-Meteo](https://github.com/open-meteo/open-meteo) | AGPL-3.0 (data CC BY 4.0) |
 
@@ -65,24 +75,61 @@ You need **Python 3.10 or newer** and a microphone.
 ```bash
 git clone https://github.com/stinkykewchie-sudo/Jarvis.git
 cd Jarvis
-./install.sh     # installs PortAudio, playerctl and espeak-ng, then the Python packages
+./install.sh     # installs PortAudio, playerctl, xdotool and espeak-ng, then the Python packages
 ./start.sh
 ```
 
 `install.sh` supports apt (Ubuntu, Debian, Mint), dnf (Fedora), pacman (Arch) and zypper (openSUSE).
 Volume control uses `wpctl`, `pactl` or `amixer`, and screenshots use `gnome-screenshot`, `spectacle`, `grim` or `scrot`.
-Most desktops already have one of each.
+Most desktops already have one of each. Browser tab control uses `xdotool`, which only works in X11 sessions, not Wayland.
+Opening tabs works everywhere.
 
-### Optional: local AI chat
+### Optional: local AI for chat and coding
 
-Built-in commands work without this. To let Jarvis answer general questions:
+Built-in commands work without this. To let Jarvis answer questions, write code and run terminal commands:
 
 1. Install Ollama from https://ollama.com (on Linux: `curl -fsSL https://ollama.com/install.sh | sh`).
-2. Download a model: `ollama pull qwen3:1.7b` (about 1.4 GB).
-3. Restart Jarvis. It prints "Local AI ready" when it finds the model.
+2. Download the models:
+   ```
+   ollama pull qwen3:1.7b          # conversation, about 1.4 GB
+   ollama pull qwen2.5-coder:3b    # code and terminal commands, about 1.9 GB
+   ```
+3. Restart Jarvis. It prints "Chat AI ready" and "Coding AI ready" when it finds them.
 
-`qwen3:1.7b` runs on most laptops. If your PC has 16 GB of RAM or a good graphics card, `qwen3:4b` or `qwen3:8b` give
-better answers. Set `OLLAMA_MODEL` in `config.py` to match.
+These models run on an ordinary laptop: chat answers take a few seconds, and a short program takes a minute or two.
+They handle small scripts and everyday commands well, but they're far less capable than big cloud AIs, so check the
+code before running anything important. With 16 GB of RAM or a good graphics card, `qwen3:4b` and
+`qwen2.5-coder:7b` are noticeably smarter. Set `OLLAMA_MODEL` and `CODER_MODEL` in `config.py` to match.
+
+## Coding and terminal commands
+
+- Code Jarvis writes is saved in a **Jarvis Projects** folder in your home folder and opened in VS Code (or Notepad).
+  Say "open my projects folder" to see everything.
+- If a program crashes, Jarvis reads the error and offers to fix it, up to three tries. If it needs a Python package,
+  it asks before installing it.
+- Programs that wait for typing, draw windows, or run forever (games, `input()`, tkinter, servers) open in their own
+  terminal window.
+- Typed mode (`--type`) is handy for longer coding requests.
+
+### Safety
+
+- Jarvis shows every terminal command and asks before running it. It also asks before running a program it wrote.
+- **It never deletes files by voice.** Commands that delete files, format disks, shut down, change system settings
+  or accounts, use `sudo`, or download-and-run scripts are refused even if you say yes. They're shown on screen so
+  you can run them yourself if you really mean to.
+- Programs that delete or move files get an extra warning before they run.
+- The AI can still make mistakes, so read the command or code before you say yes.
+
+## Teaching Jarvis
+
+| Say | What it learns |
+|---|---|
+| "when I say study time, open my school website" | A new phrase that runs any other command |
+| "remember my school website is canvas dot instructure dot com" | A name for a website ("open my school website", "open school in a new tab") |
+| "save that as check my IP" (after a command or program ran) | A phrase that runs that exact command or program again, without asking |
+| "what have you learned?" / "forget study time" | Lists or removes what you taught it |
+
+Everything you teach is saved in `jarvis_memory.json`, which you can also edit by hand.
 
 ## Options
 
@@ -102,7 +149,9 @@ Edit `config.py`:
 | `WHISPER_MODEL` | `tiny.en` (fastest), `base.en` (default), `small.en` (most accurate) |
 | `PIPER_VOICE` | Any voice from the [Piper samples page](https://rhasspy.github.io/piper-samples/), e.g. `en_US-lessac-medium` |
 | `SPEAKING_RATE` | Talking speed |
-| `OLLAMA_MODEL` | Which local AI model to chat with |
+| `OLLAMA_MODEL`, `CODER_MODEL` | Which local AI models to chat and code with |
+| `PROJECTS_DIR` | Where the code Jarvis writes is saved |
+| `CONFIRM_BEFORE_RUNNING` | Ask before running commands and programs (dangerous commands are always refused) |
 | `FOLLOW_UP_SECONDS` | How long Jarvis keeps listening after answering |
 | `WEATHER_ONLINE` | Set to `False` to keep Jarvis fully offline |
 
@@ -113,6 +162,10 @@ Edit `config.py`:
 - **It mishears me.** Set `WHISPER_MODEL = "small.en"` in `config.py`. It's more accurate but slower.
 - **Linux: `OSError: PortAudio library not found`.** Install PortAudio: `sudo apt install libportaudio2`.
 - **Linux: music controls do nothing.** Install `playerctl`.
+- **Tab commands say there's no browser window.** Make sure a browser is open (Chrome, Edge, Firefox, Brave, Opera
+  or Vivaldi). On Linux, install `xdotool` and use an X11 session.
+- **Chat or coding says the AI isn't responding.** Make sure Ollama is running: open it from the Start menu (Windows)
+  or run `ollama serve` (Linux).
 
 ## Adding your own commands
 
@@ -124,12 +177,15 @@ if re.search(r"\bflip a coin\b", t):
 ```
 
 Anything that touches the operating system goes in `system.py`, which has a Windows and a Linux version of each action.
-Run the tests with `python tests/test_commands.py` and `python tests/test_system.py`. They don't open or close anything.
+Browser tabs are in `browser.py`, coding and terminal commands in `coder.py`, and the AI prompts in `brain.py`.
+
+Run the tests with `python tests/test_commands.py`, `python tests/test_safety.py` and `python tests/test_system.py`.
+They don't open, close or run anything.
 
 ## Privacy
 
-Audio is processed on your computer and never recorded to disk. Only the weather command contacts the internet,
-and only when you ask for the weather. Weather data is provided by [Open-Meteo.com](https://open-meteo.com/).
+Audio is processed on your computer and never recorded to disk. Your notes and the things you teach Jarvis stay in
+local files. Only the weather command contacts the internet, and only when you ask for the weather. Weather data is provided by [Open-Meteo.com](https://open-meteo.com/).
 
 ## License
 

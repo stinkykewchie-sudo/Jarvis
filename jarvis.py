@@ -2,9 +2,10 @@
 Jarvis - an offline, open-source voice assistant for Windows and Linux.
 
 Say "Jarvis" followed by a command:
-    "Jarvis, open Spotify"            "Jarvis, set a timer for 10 minutes"
-    "Jarvis, play lo-fi on YouTube"   "Jarvis, what's 15 percent of 80?"
-    "Jarvis, turn the volume up"      "Jarvis, take a note: buy milk"
+    "Jarvis, open Spotify"                      "Jarvis, set a timer for 10 minutes"
+    "Jarvis, open YouTube in a new tab"         "Jarvis, close the YouTube tab"
+    "Jarvis, write a Python script that..."     "Jarvis, use the terminal to find my IP address"
+    "Jarvis, when I say study time, open canvas dot com"
 
 Options:
     --type      type commands instead of speaking
@@ -16,11 +17,12 @@ import re
 import threading
 import time
 
+import brain
 import config
+import dialog
 import skills
 import system
-from brain import Brain
-from console import status, warn, you_line
+from console import CODE, RESET, status, warn, you_line
 from mouth import Mouth
 
 WAKE_WORD = re.compile(r"\b(?:hey\s+|ok\s+|okay\s+)?(?:jarvis|jarvas|jervis|javis|travis|charvis)\b[\s,.!?]*", re.I)
@@ -32,7 +34,7 @@ def is_exit(text: str) -> bool:
     return skills.normalise(text) in EXIT_PHRASES
 
 
-def respond(command: str, brain: Brain, mouth: Mouth) -> None:
+def respond(command: str, mouth: Mouth) -> None:
     try:
         reply = skills.handle(command)
     except Exception as e:  # one broken command shouldn't crash Jarvis
@@ -41,19 +43,21 @@ def respond(command: str, brain: Brain, mouth: Mouth) -> None:
     if reply is not None:
         mouth.say(reply)
         return
-    if not brain.ready:
+    ai = brain.get()
+    if not ai.ready:
         mouth.say("I don't know that one yet. Say what can you do to hear my commands.")
         return
     status("Thinking...")
     try:
-        brain.ask(command, speak=lambda sentence: mouth.say(sentence, wait=False))
+        ai.ask(command, speak=lambda sentence: mouth.say(sentence, wait=False),
+               show_code=lambda code: print(f"{CODE}{code}{RESET}", end="", flush=True))
         mouth.wait()
     except Exception as e:
         warn(f"(local AI error: {e})")
         mouth.say("My local AI isn't responding. Make sure Ollama is running.")
 
 
-def run_typed(brain: Brain, mouth: Mouth) -> None:
+def run_typed(mouth: Mouth) -> None:
     from console import GREEN, RESET
 
     while True:
@@ -65,15 +69,16 @@ def run_typed(brain: Brain, mouth: Mouth) -> None:
             continue
         if is_exit(command):
             break
-        respond(command, brain, mouth)
+        respond(command, mouth)
     mouth.say("Goodbye.")
 
 
-def run_voice(brain: Brain, mouth: Mouth, no_wake: bool) -> None:
+def run_voice(mouth: Mouth, no_wake: bool) -> None:
     from ears import Ears
 
     ears = Ears()
     ears.calibrate()
+    dialog.setup(mouth, ears)
     mouth.say("Jarvis online." + ("" if no_wake else " Say my name when you need me."))
     awake_until = 0.0
 
@@ -106,7 +111,7 @@ def run_voice(brain: Brain, mouth: Mouth, no_wake: bool) -> None:
                 mouth.say("Goodbye. I'll be here if you need me.")
                 break
 
-            respond(command, brain, mouth)
+            respond(command, mouth)
             awake_until = time.time() + config.FOLLOW_UP_SECONDS
         except KeyboardInterrupt:
             mouth.say("Shutting down.")
@@ -124,15 +129,16 @@ def main() -> None:
         threading.Thread(target=system.windows_start_apps, daemon=True).start()
     mouth = Mouth()
     skills.announce = lambda text: mouth.say(text, wait=False)
-    brain = Brain()
+    dialog.setup(mouth)
+    brain.get()  # checks for the local AI and loads it in the background
 
     hello = f"Hello{', ' + config.YOUR_NAME if config.YOUR_NAME else ''}."
     if args.type:
         mouth.say(f"{hello} Jarvis online. Type a command, or goodbye to quit.")
-        run_typed(brain, mouth)
+        run_typed(mouth)
     else:
         mouth.say(hello, wait=False)
-        run_voice(brain, mouth, args.no_wake)
+        run_voice(mouth, args.no_wake)
 
 
 if __name__ == "__main__":

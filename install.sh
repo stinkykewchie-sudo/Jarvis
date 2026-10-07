@@ -5,15 +5,15 @@ cd "$(dirname "$0")"
 
 echo "Installing system packages (you may be asked for your password)..."
 if command -v apt-get >/dev/null; then
-    sudo apt-get install -y python3-venv python3-pip libportaudio2 playerctl espeak-ng
+    sudo apt-get install -y python3-venv python3-pip libportaudio2 playerctl xdotool espeak-ng
 elif command -v dnf >/dev/null; then
-    sudo dnf install -y python3 python3-pip portaudio playerctl espeak-ng
+    sudo dnf install -y python3 python3-pip portaudio playerctl xdotool espeak-ng
 elif command -v pacman >/dev/null; then
-    sudo pacman -S --needed --noconfirm python python-pip portaudio playerctl espeak-ng
+    sudo pacman -S --needed --noconfirm python python-pip portaudio playerctl xdotool espeak-ng
 elif command -v zypper >/dev/null; then
-    sudo zypper install -y python3 python3-pip portaudio playerctl espeak-ng
+    sudo zypper install -y python3 python3-pip portaudio playerctl xdotool espeak-ng
 else
-    echo "Unknown package manager. Please install: Python 3.10+, PortAudio, playerctl and espeak-ng."
+    echo "Unknown package manager. Please install: Python 3.10+, PortAudio, playerctl, xdotool and espeak-ng."
 fi
 
 echo "Creating virtual environment..."

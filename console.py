@@ -5,6 +5,7 @@ import os
 if os.name == "nt":
     os.system("")  # enables ANSI colours in the Windows console
 CYAN, GREEN, YELLOW, DIM, RESET = "\033[96m", "\033[92m", "\033[93m", "\033[2m", "\033[0m"
+CODE = "\033[95m"
 
 
 def status(msg: str) -> None:

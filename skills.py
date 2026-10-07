@@ -13,7 +13,11 @@ from typing import Callable
 from urllib.parse import quote_plus
 from urllib.request import urlopen
 
+import browser
+import coder
 import config
+import dialog
+import memory
 import system
 
 NOTES_FILE = Path(__file__).with_name("jarvis_notes.txt")
@@ -83,12 +87,23 @@ WEBSITES = {
 SITE_LIKE = re.compile(r"\.(com|org|net|io|gov|edu|tv|co|uk|dev|ai|app|me)\b")
 
 
+def resolve_site(name: str) -> str | None:
+    """A URL for a saved site, a well-known site, or a spoken web address. None if it isn't a website."""
+    name = re.sub(r"^(the|my)\s+", "", name.strip(" ."))
+    name = re.sub(r"\s+(website|site|page|web page|homepage)$", "", name)
+    return memory.site(name) or memory.to_url(name) or (("https://" + WEBSITES[name]) if name in WEBSITES else None)
+
+
 def open_thing(name: str) -> str:
     name = re.sub(r"^(the|my|up)\s+", "", name.strip(" ."))
+    saved = memory.site(re.sub(r"\s+(website|site|page|web page|homepage)$", "", name))
+    if saved:
+        webbrowser.open(saved)
+        return f"Opening {name}."
     name = re.sub(r"\s+(app|application|program|website|site|page)$", "", name)
-    if SITE_LIKE.search(name):
-        url = name.replace(" dot ", ".").replace(" ", "")
-        webbrowser.open(url if url.startswith("http") else "https://" + url)
+    url = memory.to_url(name) if SITE_LIKE.search(re.sub(r"\s+dot\s+", ".", name)) else None
+    if url:
+        webbrowser.open(url)
         return f"Opening {name}."
     opened = system.open_app(name)
     if opened:
@@ -281,9 +296,82 @@ JOKES = [
     "There are ten kinds of people in the world. Those who understand binary, and those who don't.",
 ]
 
-HELP = ("I can open apps and websites, close apps, play things on YouTube, search Google, control your music and volume, "
-        "set timers, take notes, check the weather, do maths, tell the time, check the battery, lock the computer, "
-        "and take screenshots. Say goodbye to shut me down.")
+HELP = ("I can open apps and websites, open and close browser tabs, control music and volume, set timers, take notes, "
+        "check the weather, do maths, and lock the computer. I can also write and run code, answer programming "
+        "questions, and run terminal commands for you. You can teach me new commands, like: when I say study time, "
+        "open my school website. Say goodbye to shut me down.")
+
+# ---------------------------------------------------------------------------
+# Coding, terminal and teaching phrases
+# ---------------------------------------------------------------------------
+CODE_NOUN = r"(?:script|program|code|function|app|application|game|bot|website|web ?page|webpage|tool|class|calculator|cli)"
+WRITE_CODE = re.compile(
+    rf"^(?:write|create|make|build|code|generate|program|develop)(?: me| us)?(?: a| an| some| another| the following)\b.*\b{CODE_NOUN}\b"
+    r"|^(?:write|generate) (?:some |me some )?(?:python |javascript |html |bash |powershell )?code\b"
+    r"|^(?:write|create|make|build|code)\b.*\bin (?:python|javascript|html|bash|powershell)$")
+EDIT_CODE = re.compile(
+    rf"^(?:change|update|modify|edit|fix|improve|rewrite|refactor|add|remove|make)\b.*\b(?:the|my|that|this) {CODE_NOUN}\b"
+    r"|^(?:change|update|modify|edit|fix|improve|rewrite|refactor|clean up)\s+it\b")
+LAST_PROGRAM = r"(?:it|that|the script|the program|the code|the game|the app|my script|my program|my code)"
+TERMINAL = re.compile(
+    r"^(?:use the terminal to|use (?:powershell|bash|the command line|command prompt|a command) to|in the terminal|"
+    r"terminal|run a (?:terminal |shell )?command (?:to|that)|execute a command (?:to|that))\s+(.+)$"
+    r"|^(.+?) (?:in|using|with|from) (?:the )?(?:terminal|command line|powershell|bash|command prompt)$")
+TEACH_COMMAND = re.compile(
+    r"^when i say (.+?) (?:you should |please |just |then )?((?:open|go to|search|play|run|close|turn|set|take|lock|"
+    r"tell|read|start|launch|show|use|write|new tab|pause|mute|google|look up)\b.*)$")
+TEACH_SITE = re.compile(
+    r"^(?:remember|save|learn|note) (?:that )?(?:my |the )?(.+?) (?:website |site |page |link |url |address )?is (?:at )?(.+)$")
+
+
+def run_custom(action, depth: int) -> str | None:
+    if isinstance(action, str):
+        return handle(action, depth + 1) if depth < 3 else None
+    if "shell" in action:
+        return coder.offer_command(action["shell"], ask=False)
+    if "script" in action:
+        return coder.run_script(Path(action["script"]))
+    return None
+
+
+def browser_commands(t: str) -> str | None:
+    m = (re.fullmatch(r"(?:open |make |create |start )?(?:a )?new tab(?: (?:to|for|with|on|at|and go to|and open) (.+))?", t)
+         or re.fullmatch(r"(?:open|go to|load|pull up) (.+?) in (?:a )?new tab", t))
+    if m:
+        target = m.group(1)
+        if not target:
+            return browser.new_tab()
+        return browser.new_tab(resolve_site(target) or "https://www.google.com/search?q=" + quote_plus(target))
+    if re.fullmatch(r"close (?:this |the |current |that |my )?(?:browser )?tab", t):
+        return browser.close_tabs(1)
+    if re.fullmatch(r"close (?:all |all of |all the |all my |every )(?:the |my )?(?:browser )?tabs|close (?:the |my )?browser window", t):
+        if dialog.confirm("That closes every tab in the browser window. Are you sure?"):
+            return browser.close_window()
+        return "Okay, I'll leave them open."
+    m = re.fullmatch(r"close (?:the )?(?:last )?(\d+|" + "|".join(NUMBER_WORDS) + r") tabs", t)
+    if m:
+        n = m.group(1)
+        return browser.close_tabs(int(n) if n.isdigit() else NUMBER_WORDS[n])
+    m = re.fullmatch(r"close (?:the |my )?(.+?) tab", t)
+    if m:
+        return browser.close_tab_named(m.group(1))
+    if re.search(r"\b(reopen|restore|bring back|undo close)(?: the| my)?(?: last| closed| last closed)? tab\b"
+                 r"|\bopen (?:the |my )?(?:last )?closed tab\b", t):
+        return browser.reopen_tab()
+    if re.fullmatch(r"(?:next|switch to the next|go to the next) tab", t):
+        return browser.next_tab()
+    if re.fullmatch(r"(?:previous|last|switch to the previous|go to the previous) tab", t):
+        return browser.previous_tab()
+    m = re.fullmatch(r"(?:switch|go|change|jump) (?:back )?to (?:the |my )?(.+?) tab", t)
+    if m:
+        return browser.switch_to_tab(m.group(1))
+    if re.fullmatch(r"(?:refresh|reload)(?: the| this)?(?: page| tab| website)?", t):
+        return browser.refresh()
+    if re.fullmatch(r"go back(?: a page| one page)?|(?:go to the )?previous page", t):
+        return browser.back()
+    if re.fullmatch(r"go forward(?: a page| one page)?", t):
+        return browser.forward()
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -304,11 +392,61 @@ def normalise(text: str) -> str:
     return t
 
 
-def handle(text: str) -> str | None:
+def handle(text: str, depth: int = 0) -> str | None:
     """Run a built-in command. Returns what Jarvis should say ("" = nothing), or None if no command matched."""
     t = normalise(text)
     if not t:
         return None
+
+    # --- commands you've taught me ---
+    action = memory.command_for(t)
+    if action is not None:
+        return run_custom(action, depth)
+
+    # --- coding (checked early, so "write a weather app" isn't a weather question) ---
+    if WRITE_CODE.search(t):
+        return coder.write_code(text.strip())
+    if coder.last_script and EDIT_CODE.search(t):
+        return coder.edit_code(text.strip())
+    if re.fullmatch(rf"(?:run|start|execute|test|try|launch) {LAST_PROGRAM}(?: again)?", t):
+        return coder.run_script()
+    if re.fullmatch(r"(?:open|show me) (?:the|my|that) (?:script|code|program)", t) and coder.last_script:
+        coder.open_in_editor(coder.last_script)
+        return "Here's the code."
+    if re.search(r"\b(?:open|show)(?: me)? (?:my )?(?:jarvis )?(?:projects|coding projects|code)(?: folder)?$", t):
+        return coder.open_projects()
+    m = TERMINAL.search(t)
+    if m:
+        return coder.terminal(text.strip())
+
+    # --- teaching ---
+    m = TEACH_COMMAND.fullmatch(t)
+    if m:
+        memory.teach(m.group(1), m.group(2))
+        return f"Got it. When you say {m.group(1)}, I'll {m.group(2)}."
+    m = re.fullmatch(r"(?:save|remember|call) (?:that|this|it)(?: command| script| program)? as (.+)", t)
+    if m:
+        saved = coder.save_last(m.group(1))
+        if not saved:
+            return "There's nothing to save yet. Run a command or a program first."
+        memory.teach(m.group(1), saved)
+        return f"Saved. Just say {m.group(1)} to run it again."
+    m = TEACH_SITE.fullmatch(t)
+    if m and memory.to_url(m.group(2)):
+        name = re.sub(r"\s+(website|site|page)$", "", m.group(1))
+        memory.remember_site(name, memory.to_url(m.group(2)))
+        return f"Got it. Say open my {name} website, or open {name} in a new tab."
+    m = re.fullmatch(r"forget (?:about )?(?:the |my )?(?:command |site |website )?(.+)", t)
+    if m:
+        return "Forgotten." if memory.forget(m.group(1)) else f"I don't have anything saved called {m.group(1)}."
+    if re.search(r"\b(what have you learned|what have i taught you|what do you remember|list (?:my )?(?:custom |saved )?commands"
+                 r"|what are my (?:custom |saved )?commands|show (?:me )?my commands|my saved (?:sites|websites))\b", t):
+        return memory.describe()
+
+    # --- browser tabs ---
+    reply = browser_commands(t)
+    if reply is not None:
+        return reply
 
     # --- small talk ---
     if re.fullmatch(r"(hi|hello|hey|yo|good (morning|afternoon|evening)|hello there)( jarvis)?", t):
@@ -392,9 +530,13 @@ def handle(text: str) -> str | None:
     m = re.fullmatch(r"(?:close|quit|exit|kill|shut) (?:down )?(.+)", t)
     if m and not re.fullmatch(r"(down|yourself|jarvis)", m.group(1)):
         return close_app(m.group(1))
-    m = re.fullmatch(r"(?:open|launch|start|run|go to|load|bring up|pull up|show me|open up) (.+)", t)
+    m = re.fullmatch(r"(?:open|launch|start|go to|load|bring up|pull up|show me|open up) (.+)", t)
     if m:
         return open_thing(m.group(1))
+    m = re.fullmatch(r"(?:run|execute) (.+)", t)
+    if m:  # "run spotify" opens an app; anything else is treated as a terminal request
+        opened = system.open_app(m.group(1))
+        return f"Opening {opened}." if opened else coder.terminal(text.strip())
 
     # --- maths ---
     m = re.fullmatch(r"(?:what(?:'s| is)|calculate|how much is|compute|work out)\s+(.+)", t)
