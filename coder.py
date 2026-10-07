@@ -223,6 +223,70 @@ def _spoken_name(path: Path) -> str:
     return path.stem.replace("_", " ")
 
 
+# ---------------------------------------------------------------------------
+# Deciding what counts as a request to write code
+# ---------------------------------------------------------------------------
+_BUILD_VERB = r"write|create|make|build|code|develop|program|generate|design|put together|whip up|hack together"
+_CODE_THING = (r"program|programme|script|app|application|game|bot|website|web ?page|webpage|web ?app|tool|utility|"
+               r"cli|function|class|dashboard|scraper|crawler|server|api|project|calculator|converter|"
+               r"timer|clock|quiz|chatbot|to-?do list|todo list|spreadsheet|gui")
+_LANG = r"python|javascript|js|typescript|html|css|bash|powershell|java|c\+\+|c#|rust|go|sql"
+
+# "write a python script", "I want a program that...", "build me a discord bot", "write some code to..."
+NEW_CODE = re.compile(
+    rf"\b(?:{_BUILD_VERB})\b[^.]*?\b(?:{_CODE_THING})\b"              # verb ... thing (any words between)
+    rf"|\b(?:i (?:want|need|would like|'d like|wanna)|give me|show me) [^.]*?\b(?:{_CODE_THING})\b"  # "I want a program that..."
+    rf"|\b(?:{_BUILD_VERB})\b[^.]*?\bin (?:{_LANG})\b"               # "create a calculator in python"
+    rf"|\b(?:write|create|generate) (?:me )?(?:some )?code\b", re.I)  # "write some code to..."
+
+# "code for me", "help me code", "can you help me code", "let's code", "start coding", "write some code"
+VAGUE_CODE = re.compile(
+    r"^(?:(?:can|could|will|would) you |please |hey |ok(?:ay)? |so )*"
+    r"(?:help me |let'?s |i(?:'d| would)? (?:like|love|want) (?:to |you to )?|i want to |i wanna |i need (?:to |you to )?)*"
+    r"(?:help me |)(?:do some |write some |some )?(?:cod(?:e|ing)|program(?:ming)?)"
+    r"(?: (?:for me|something|with me|together|stuff|please|now|again))*[.!?]*$", re.I)
+START_CODING = re.compile(
+    r"^(?:let'?s |please |ok(?:ay)? )?(?:start|begin|get started|get going|get to it)"
+    r"(?: (?:and |now |with )?(?:coding|programming|the code|the program|building|the project))*[.!?]*$", re.I)
+EXAMPLE = re.compile(r"\b(an example|example project|example|something simple|anything|surprise me|a demo|sample "
+                     r"project|you (?:pick|choose|decide)|whatever you (?:want|like))\b", re.I)
+
+DEFAULT_PROJECT = ("a number guessing game: pick a random number between 1 and 100, then keep asking the user to "
+                   "guess it, saying higher or lower each time, until they get it, and show how many guesses it took")
+
+# Words that are just request scaffolding, not a description of what to build
+_SCAFFOLD = re.compile(
+    r"\b(?:can|could|would|will|you|please|hey|ok|okay|so|now|just|help|me|us|let'?s|i|i'd|would|like|love|want|"
+    r"wanna|need|to|do|some|write|create|made?|build|code|coding|program|programme|programming|develop|generate|"
+    r"design|put|together|whip|up|a|an|the|another|my|for|that|which|able|get|getting|start|started|begin|going|"
+    r"go|ahead|and|with|it|this|simple|small|quick|little|basic|cool|nice|good|something|anything|example|" +
+    _CODE_THING + r")\b", re.I)
+
+
+def _detail_words(text: str) -> list[str]:
+    """Words left once the request scaffolding is stripped - i.e. what to actually build."""
+    return re.findall(r"[a-z0-9+#]{2,}", _SCAFFOLD.sub(" ", text).lower())
+
+
+def code_request(text: str, t: str) -> str | None:
+    """Handle any request to write a program. `t` is the normalised text. Returns a reply, or None if not coding."""
+    is_new = bool(NEW_CODE.search(t))
+    if not is_new and not (VAGUE_CODE.match(t) or START_CODING.match(t)):
+        return None
+    if not brain.get().ready:
+        return NEED_AI
+    if EXAMPLE.search(t):  # "show me an example", "surprise me" - just build a quick demo
+        dialog.say("Sure. Here's a small project to show you how this works.", wait=False)
+        return write_code(DEFAULT_PROJECT)
+    if is_new and _detail_words(t):  # enough to build from - do it now, no questions
+        return write_code(text.strip())
+    answer = dialog.ask("Sure, I can write that. What should the program do? "
+                        "For example, a script that organises your downloads folder, or a snake game.")
+    if answer and not dialog.NO.search(answer) and _detail_words(answer):
+        return write_code(answer.strip())
+    return "No problem. Just tell me what to build, like: write a script that renames my photos by date."
+
+
 def write_code(request: str) -> str:
     global last_script, last_was_script
     b = brain.get()

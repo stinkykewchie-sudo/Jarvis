@@ -40,14 +40,23 @@ skills.browser = types.SimpleNamespace(
     previous_tab=recorder("previous_tab", ""), switch_to_tab=recorder("switch_to_tab", "Here."),
     refresh=recorder("refresh", ""), back=recorder("back", ""), forward=recorder("forward", ""),
 )
-skills.coder = types.SimpleNamespace(
-    write_code=recorder("write_code", "Wrote it."), edit_code=recorder("edit_code", "Updated."),
-    run_script=recorder("run_script", "Ran it."), terminal=recorder("terminal", "Ran the command."),
-    offer_command=lambda cmd, ask=True: calls.append(("saved_shell", cmd)) or "Ran saved command.",
-    open_projects=recorder("open_projects", "Projects."), open_in_editor=recorder("open_in_editor"),
-    save_last=lambda name: {"shell": "ipconfig"}, last_script=Path("example.py"),
-)
-skills.dialog = types.SimpleNamespace(confirm=recorder("confirm", True))
+# Use the real coder module (so code_request routing is tested), with only its side effects stubbed
+import coder  # noqa: E402
+
+coder.write_code = recorder("write_code", "Wrote it.")
+coder.edit_code = recorder("edit_code", "Updated.")
+coder.run_script = recorder("run_script", "Ran it.")
+coder.terminal = recorder("terminal", "Ran the command.")
+coder.offer_command = lambda cmd, ask=True: calls.append(("saved_shell", cmd)) or "Ran saved command."
+coder.open_projects = recorder("open_projects", "Projects.")
+coder.open_in_editor = recorder("open_in_editor")
+coder.save_last = lambda name: {"shell": "ipconfig"}
+coder.last_script = Path("example.py")
+coder.brain = types.SimpleNamespace(get=lambda: types.SimpleNamespace(ready=True))
+ASK_ANSWER = ["a snake game"]  # what the user "says" when Jarvis asks what to build
+skills.dialog = coder.dialog = types.SimpleNamespace(
+    confirm=recorder("confirm", True), say=lambda *a, **k: None,
+    ask=lambda q, **k: calls.append(("ask",)) or ASK_ANSWER[0], NO=__import__("re").compile(r"\bno\b", __import__("re").I))
 memory.FILE = Path(tempfile.gettempdir()) / "jarvis_test_memory.json"
 memory.FILE.unlink(missing_ok=True)
 memory._data = None
@@ -133,6 +142,18 @@ CASES = [
     ("Can you make a snake game in Python?", "Wrote it.", ("write_code",)),
     ("Write a weather app", "Wrote it.", ("write_code",)),
     ("Build me a website for my bakery", "Wrote it.", ("write_code",)),
+    ("I want a program that gets crypto prices continuously", "Wrote it.", ("write_code",)),
+    ("Can you build me a Discord bot that welcomes new members", "Wrote it.", ("write_code",)),
+    ("I need a tool to back up my documents folder", "Wrote it.", ("write_code",)),
+    # vague coding -> asks once, then builds from the answer
+    ("Can you code for me?", "Wrote it.", ("ask",)),
+    ("Help me code", "Wrote it.", ("ask",)),
+    ("Can you help me code", "Wrote it.", ("ask",)),
+    ("Let's code", "Wrote it.", ("ask",)),
+    ("Start coding", "Wrote it.", ("ask",)),
+    ("Write some code", "Wrote it.", ("ask",)),
+    # "show me an example" -> builds a demo without asking
+    ("Give me an example project and start coding", "Wrote it.", ("write_code",)),
     ("Make the game faster", "Updated.", ("edit_code",)),
     ("Fix it", "Updated.", ("edit_code",)),
     ("Run it again", "Ran it.", ("run_script",)),

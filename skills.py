@@ -343,10 +343,6 @@ HELP = ("I can open apps and websites, open and close browser tabs, control musi
 # Coding, terminal and teaching phrases
 # ---------------------------------------------------------------------------
 CODE_NOUN = r"(?:script|program|code|function|app|application|game|bot|website|web ?page|webpage|tool|class|calculator|cli)"
-WRITE_CODE = re.compile(
-    rf"^(?:write|create|make|build|code|generate|program|develop)(?: me| us)?(?: a| an| some| another| the following)\b.*\b{CODE_NOUN}\b"
-    r"|^(?:write|generate) (?:some |me some )?(?:python |javascript |html |bash |powershell )?code\b"
-    r"|^(?:write|create|make|build|code)\b.*\bin (?:python|javascript|html|bash|powershell)$")
 EDIT_CODE = re.compile(
     rf"^(?:change|update|modify|edit|fix|improve|rewrite|refactor|add|remove|make)\b.*\b(?:the|my|that|this) {CODE_NOUN}\b"
     r"|^(?:change|update|modify|edit|fix|improve|rewrite|refactor|clean up)\s+it\b")
@@ -442,19 +438,21 @@ def handle(text: str, depth: int = 0) -> str | None:
         return run_custom(action, depth)
 
     # --- coding (checked early, so "write a weather app" isn't a weather question) ---
-    if WRITE_CODE.search(t):
-        return coder.write_code(text.strip())
     if coder.last_script and EDIT_CODE.search(t):
         return coder.edit_code(text.strip())
     if re.fullmatch(rf"(?:run|start|execute|test|try|launch) {LAST_PROGRAM}(?: again)?", t):
+        return coder.run_script()
+    if coder.last_script and re.fullmatch(r"(?:go ahead|do it|go for it|run it|let'?s go|that works|sounds good)[.!?]*", t):
         return coder.run_script()
     if re.fullmatch(r"(?:open|show me) (?:the|my|that) (?:script|code|program)", t) and coder.last_script:
         coder.open_in_editor(coder.last_script)
         return "Here's the code."
     if re.search(r"\b(?:open|show)(?: me)? (?:my )?(?:jarvis )?(?:projects|coding projects|code)(?: folder)?$", t):
         return coder.open_projects()
-    m = TERMINAL.search(t)
-    if m:
+    reply = coder.code_request(text, t)  # "write a program that...", "help me code", "start coding"
+    if reply is not None:
+        return reply
+    if TERMINAL.search(t):
         return coder.terminal(text.strip())
 
     # --- teaching ---
