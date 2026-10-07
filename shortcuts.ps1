@@ -25,14 +25,15 @@ if ($NoStartup) {
     exit
 }
 
-if (-not (Test-Path "$dir\jarvis.ico") -and (Test-Path "$dir\.venv\Scripts\python.exe")) {
+if (-not ((Test-Path "$dir\jarvis.ico") -and (Test-Path "$dir\jarvis.png")) -and (Test-Path "$dir\.venv\Scripts\python.exe")) {
     & "$dir\.venv\Scripts\python.exe" "$dir\make_icon.py" | Out-Null
 }
 
+$pythonw = Join-Path $dir ".venv\Scripts\pythonw.exe"   # runs the GUI with no console window
 $shell = New-Object -ComObject WScript.Shell
-function New-JarvisShortcut($path, $arguments, $description, $windowStyle = 1) {
+function New-JarvisShortcut($path, $target, $arguments, $description, $windowStyle = 1) {
     $s = $shell.CreateShortcut($path)
-    $s.TargetPath = Join-Path $dir "Start Jarvis.bat"
+    $s.TargetPath = $target
     $s.Arguments = $arguments
     $s.WorkingDirectory = $dir
     $s.IconLocation = "$dir\jarvis.ico,0"
@@ -42,10 +43,14 @@ function New-JarvisShortcut($path, $arguments, $description, $windowStyle = 1) {
     Write-Host "Created $path"
 }
 
+$gui = "$dir\gui.py"
+$bat = Join-Path $dir "Start Jarvis.bat"
 New-Item -ItemType Directory -Force $menu | Out-Null
-New-JarvisShortcut $desktop "" "Jarvis voice assistant - say 'Jarvis' and a command"
-New-JarvisShortcut (Join-Path $menu "Jarvis.lnk") "" "Jarvis voice assistant - say 'Jarvis' and a command"
-New-JarvisShortcut (Join-Path $menu "Jarvis (type commands).lnk") "--type" "Jarvis with typed commands instead of voice"
+# The main icon opens the window; extra Start-menu entries for the terminal versions
+New-JarvisShortcut $desktop $pythonw "`"$gui`"" "Jarvis - your personal assistant"
+New-JarvisShortcut (Join-Path $menu "Jarvis.lnk") $pythonw "`"$gui`"" "Jarvis - your personal assistant"
+New-JarvisShortcut (Join-Path $menu "Jarvis (voice terminal).lnk") $bat "" "Jarvis in a terminal, voice mode"
+New-JarvisShortcut (Join-Path $menu "Jarvis (type commands).lnk") $bat "--type" "Jarvis in a terminal, typed mode"
 if ($Startup) {
-    New-JarvisShortcut $autostart "" "Starts Jarvis when you log in" 7
+    New-JarvisShortcut $autostart $pythonw "`"$gui`" --tray" "Starts Jarvis in the system tray when you log in" 7
 }

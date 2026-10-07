@@ -4,4 +4,6 @@ sounddevice>=0.5
 numpy>=1.26
 psutil>=5.9
 ollama>=0.4
+pystray>=0.19
+pillow>=10
 pywin32>=306; sys_platform == "win32"

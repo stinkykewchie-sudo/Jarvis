@@ -25,7 +25,7 @@ import config
 import dialog
 import skills
 import system
-from console import CODE, RESET, status, warn, you_line
+from console import status, warn, you_line
 from mouth import Mouth
 
 WAKE_WORD = re.compile(r"\b(?:hey\s+|ok\s+|okay\s+)?(?:jarvis|jarvas|jervis|javis|travis|charvis)\b[\s,.!?]*", re.I)
@@ -58,14 +58,16 @@ def is_exit(text: str) -> bool:
     return skills.normalise(text) in EXIT_PHRASES
 
 
-def respond(command: str, mouth: Mouth) -> None:
+def respond(command: str) -> None:
+    """Handle one command and speak/show the result. Output goes through `dialog`, so this works the
+    same in typed, voice and GUI mode."""
     started = time.time()
     ai = brain.get()
     try:
         reply = skills.handle(command)
         route = "command"
         if reply is None and ai.ready:  # loosely worded? let the AI pick the matching command
-            status("Thinking...")
+            dialog.status("Thinking...")
             picked = ai.pick_command(command)
             if picked:
                 reply, route = skills.handle(picked), f"AI picked: {picked}"
@@ -75,22 +77,22 @@ def respond(command: str, mouth: Mouth) -> None:
         reply, route = "Sorry, something went wrong with that command.", "error"
     if reply is not None:
         log.info("%s -> %s | %r (%.1fs)", command, route, reply, time.time() - started)
-        mouth.say(reply)
+        dialog.say(reply)
         return
     if not ai.ready:
         log.info("%s -> no command, AI off", command)
-        mouth.say("I don't know that one yet. Say what can you do to hear my commands.")
+        dialog.say("I don't know that one yet. Say what can you do to hear my commands.")
         return
-    status("Thinking...")
+    dialog.status("Thinking...")
     try:
-        answer = ai.ask(command, speak=lambda sentence: mouth.say(sentence, wait=False),
-                        show_code=lambda code: print(f"{CODE}{code}{RESET}", end="", flush=True))
+        answer = ai.ask(command, speak=lambda sentence: dialog.say(sentence, wait=False),
+                        show_code=dialog.stream_code)
         log.info("%s -> AI chat | %r (%.1fs)", command, answer, time.time() - started)
-        mouth.wait()
+        dialog.wait()
     except Exception as e:
         warn(f"(local AI error: {e})")
         log.exception("AI error")
-        mouth.say("My local AI isn't responding. Make sure Ollama is running.")
+        dialog.say("My local AI isn't responding. Make sure Ollama is running.")
 
 
 def run_typed(mouth: Mouth) -> None:
@@ -105,7 +107,7 @@ def run_typed(mouth: Mouth) -> None:
             continue
         if is_exit(command):
             break
-        respond(command, mouth)
+        respond(command)
     mouth.say("Goodbye.")
 
 
@@ -147,7 +149,7 @@ def run_voice(mouth: Mouth, no_wake: bool) -> None:
                 mouth.say("Goodbye. I'll be here if you need me.")
                 break
 
-            respond(command, mouth)
+            respond(command)
             awake_until = time.time() + config.FOLLOW_UP_SECONDS
         except KeyboardInterrupt:
             mouth.say("Shutting down.")
