@@ -1,0 +1,11 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Downloaded on first run
+models/
+voices/
+
+# Personal data
+jarvis_notes.txt
