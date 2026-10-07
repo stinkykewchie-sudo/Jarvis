@@ -22,6 +22,37 @@ python3 -m venv .venv
 .venv/bin/python -m pip install -r requirements.txt
 
 chmod +x start.sh
+
+echo "Adding Jarvis to your app menu..."
+[ -f jarvis.png ] || .venv/bin/python make_icon.py >/dev/null
+here="$(pwd)"
+apps="$HOME/.local/share/applications"
+mkdir -p "$apps"
+desktop_entry() {  # name, arguments
+    cat <<ENTRY
+[Desktop Entry]
+Type=Application
+Name=$1
+Comment=Offline voice assistant
+Exec="$here/start.sh" $2
+Path=$here
+Icon=$here/jarvis.png
+Terminal=true
+Categories=Utility;
+ENTRY
+}
+desktop_entry "Jarvis" "" > "$apps/jarvis.desktop"
+desktop_entry "Jarvis (type commands)" "--type" > "$apps/jarvis-typed.desktop"
+
+read -r -p "Start Jarvis automatically when you log in? [y/N] " answer || answer=n
+if [[ "$answer" =~ ^[Yy] ]]; then
+    mkdir -p "$HOME/.config/autostart"
+    desktop_entry "Jarvis" "" > "$HOME/.config/autostart/jarvis.desktop"
+    echo "Jarvis will start when you log in. To stop that, delete ~/.config/autostart/jarvis.desktop"
+fi
+
 echo
-echo "Done! Run ./start.sh to start Jarvis."
-echo "Optional: install Ollama (curl -fsSL https://ollama.com/install.sh | sh) and run 'ollama pull qwen3:1.7b' so Jarvis can chat."
+echo "Done! Open Jarvis from your app menu, or run ./start.sh"
+echo "Optional: install Ollama (curl -fsSL https://ollama.com/install.sh | sh), then run these so Jarvis can chat and code:"
+echo "    ollama pull qwen3:1.7b"
+echo "    ollama pull qwen2.5-coder:3b"

@@ -67,8 +67,10 @@ You need **Python 3.10 or newer** and a microphone.
 
 1. Install Python from https://www.python.org/downloads/ (tick "Add python.exe to PATH").
 2. Download this repository (green **Code** button, then **Download ZIP**) and unzip it, or `git clone` it.
-3. Double-click **`install.bat`**.
-4. Double-click **`Start Jarvis.bat`**.
+3. Double-click **`install.bat`**. It installs everything, adds **Jarvis** to your Desktop and Start menu,
+   and asks whether Jarvis should start when you log in.
+4. Start Jarvis from the Desktop icon or the Start menu. **Jarvis (type commands)** in the Start menu opens
+   it in typed mode.
 
 ### Linux
 
@@ -78,6 +80,9 @@ cd Jarvis
 ./install.sh     # installs PortAudio, playerctl, xdotool and espeak-ng, then the Python packages
 ./start.sh
 ```
+
+`install.sh` also adds **Jarvis** and **Jarvis (type commands)** to your app menu, and asks whether Jarvis should
+start when you log in.
 
 `install.sh` supports apt (Ubuntu, Debian, Mint), dnf (Fedora), pacman (Arch) and zypper (openSUSE).
 Volume control uses `wpctl`, `pactl` or `amixer`, and screenshots use `gnome-screenshot`, `spectacle`, `grim` or `scrot`.
@@ -130,6 +135,16 @@ code before running anything important. With 16 GB of RAM or a good graphics car
 | "what have you learned?" / "forget study time" | Lists or removes what you taught it |
 
 Everything you teach is saved in `jarvis_memory.json`, which you can also edit by hand.
+
+### Starting Jarvis when you log in
+
+If you said yes during install, Jarvis starts minimised each time you log in and listens for its name.
+It's fine if Ollama starts a little later: Jarvis checks again when you first ask it something.
+
+- **Windows:** turn it on or off with
+  `powershell -ExecutionPolicy Bypass -File shortcuts.ps1 -Startup` or `-NoStartup`,
+  or in Task Manager under **Startup apps**. `-Remove` removes every Jarvis shortcut.
+- **Linux:** delete `~/.config/autostart/jarvis.desktop` to turn it off, or run `./install.sh` again to turn it on.
 
 ## Options
 

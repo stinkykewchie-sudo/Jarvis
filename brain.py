@@ -8,6 +8,7 @@ import json
 import re
 import sys
 import threading
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import Callable
@@ -32,16 +33,29 @@ def _tag(model: str) -> str:
 class Brain:
     MAX_TURNS = 8  # remembered back-and-forths
 
+    RECHECK_SECONDS = 15  # how often to look for Ollama again if it wasn't running
+
     def __init__(self) -> None:
         self.history: list[dict] = []
         self.models: set[str] = set()
+        self._checked_at = 0.0
+        if not self._find_models():
+            status("Ollama isn't running - chat and coding are off for now, built-in commands still work. "
+                   "(Jarvis will check again when you ask something.)")
+            return
+        self._announce()
+
+    def _find_models(self) -> bool:
+        self._checked_at = time.time()
         try:
             import ollama
 
             self.models = {m.model for m in ollama.list().models}
         except Exception:
-            status("Ollama not found - chat and coding are off, built-in commands still work. (https://ollama.com)")
-            return
+            self.models = set()
+        return bool(self.models)
+
+    def _announce(self) -> None:
         for label, model in (("Chat", config.OLLAMA_MODEL), ("Coding", config.CODER_MODEL)):
             if _tag(model) in self.models:
                 status(f"{label} AI ready ({model}).")
@@ -52,6 +66,9 @@ class Brain:
 
     @property
     def ready(self) -> bool:
+        # Ollama may start after Jarvis (for example when both start at login), so look again now and then
+        if not self.models and time.time() - self._checked_at > self.RECHECK_SECONDS and self._find_models():
+            self._announce()
         return _tag(config.OLLAMA_MODEL) in self.models or self.coder_ready
 
     @property
