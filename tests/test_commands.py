@@ -32,6 +32,7 @@ skills.system = types.SimpleNamespace(
     screenshot=recorder("screenshot", "Screenshot saved."), battery=recorder("battery", "The battery is at 80 percent."),
 )
 skills.webbrowser = types.SimpleNamespace(open=recorder("browser"))
+skills.first_youtube_video = lambda q: "https://www.youtube.com/watch?v=" + q.replace(" ", "_")  # no network in tests
 skills.browser = types.SimpleNamespace(
     new_tab=recorder("new_tab", "New tab."), close_tabs=recorder("close_tabs", "Closed."),
     close_window=recorder("close_window", "Closed all."), close_tab_named=recorder("close_tab_named", "Closed."),
@@ -74,10 +75,18 @@ CASES = [
     ("Volume down a little", "Turning it down.", ("volume_change", -6)),
     ("Set the volume to 40 percent", "Volume set to 40 percent.", ("volume_set", 40)),
     ("Mute", "", ("mute",)),
-    ("Pause the music.", "", ("media", "play_pause")),
+    ("Pause the music.", "Paused.", ("media", "play_pause")),
+    ("Resume", "", ("media", "play_pause")),
     ("Next song", "", ("media", "next")),
     ("Previous track", "", ("media", "previous")),
-    ("Play Bohemian Rhapsody on YouTube", "Here's bohemian rhapsody on YouTube.", ("browser",)),
+    ("Play Bohemian Rhapsody on YouTube", "Playing bohemian rhapsody.", ("browser", "https://www.youtube.com/watch?v=bohemian_rhapsody")),
+    ("Play music.", "Playing some music.", ("browser", "https://www.youtube.com/watch?v=popular_music_mix")),
+    ("Can you play some music?", "Playing some music.", ("browser",)),
+    ("Put on some music", "Playing some music.", ("browser",)),
+    ("I want to listen to music", "Playing some music.", ("browser",)),
+    ("Play Drake.", "Playing drake.", ("browser", "https://www.youtube.com/watch?v=drake")),
+    ("I want to listen to Taylor Swift", "Playing taylor swift.", ("browser",)),
+    ("Play lo-fi beats.", "Playing lo-fi beats.", ("browser",)),
     ("Search for best pizza near me", "Here are the results for best pizza near me.", ("browser",)),
     ("Open Spotify", "Opening Spotify.", ("open_app", "spotify")),
     ("Open the notepad app", "Opening Notepad.", ("open_app", "notepad")),

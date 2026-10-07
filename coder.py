@@ -1,8 +1,10 @@
 """Terminal commands and coding with the local AI.
 
 Safety rules:
-  - Every terminal command and program is shown on screen, and Jarvis asks before running it
-    (unless you saved it yourself, or set CONFIRM_BEFORE_RUNNING = False).
+  - Every terminal command and program is shown on screen.
+  - Commands that only look things up run straight away; anything else asks first
+    (or everything asks, with ALWAYS_ASK_BEFORE_RUNNING = True).
+  - Programs Jarvis writes run straight away, unless they delete or move files - then it asks.
   - Commands that could wipe files or the system are never run by voice, whatever you answer.
 """
 
@@ -44,6 +46,35 @@ DANGEROUS = [re.compile(p, re.I) for p in (
     r"\b(?:invoke-expression|iex)\b", r"\b(?:curl|wget|iwr|irm|invoke-webrequest|invoke-restmethod)\b.*\|\s*(?:ba|z)?sh\b",
     r":\(\)\s*\{",
 )]
+
+# Commands made only of these just look things up, so they run without asking
+READ_ONLY = {
+    # Windows
+    "ipconfig", "ping", "hostname", "whoami", "systeminfo", "tasklist", "findstr", "dir", "type", "echo",
+    "nslookup", "netstat", "tracert", "getmac", "ver", "tree", "where", "date", "time", "vol", "driverquery",
+    "sort-object", "where-object", "select-object", "measure-object", "group-object", "out-string",
+    "write-output", "write-host", "resolve-dnsname", "test-connection", "test-path", "test-netconnection",
+    # Linux and macOS
+    "ls", "cat", "df", "du", "free", "uname", "uptime", "ip", "ifconfig", "lsblk", "lscpu", "lsusb", "lspci",
+    "ps", "grep", "head", "tail", "wc", "sort", "uniq", "cut", "pwd", "which", "nproc", "sensors", "ss",
+    "cal", "id", "groups", "file", "stat", "whereis", "hostnamectl", "timedatectl", "lsb_release", "dig",
+}
+READ_ONLY_PREFIXES = ("get-", "format-", "select-", "measure-", "test-", "resolve-")
+
+
+def is_read_only(command: str) -> bool:
+    """True when every part of a pipeline is a command that only reads information."""
+    if re.search(r"[>`]|\$\(|\b(?:-exec|-delete|-ok)\b", command):
+        return False  # redirection, sub-commands and find actions can change things
+    for part in re.split(r"\|\||&&|[|;]", command):
+        words = part.strip().split()
+        if not words:
+            continue
+        name = words[0].lower().removesuffix(".exe")
+        if name not in READ_ONLY and not name.startswith(READ_ONLY_PREFIXES):
+            return False
+    return True
+
 
 # Programs the AI writes are checked for these before running, and you get an extra warning
 DELETES_FILES = re.compile(r"os\.remove|os\.unlink|os\.rmdir|shutil\.rmtree|shutil\.move|\.unlink\(|\.rmdir\(|"
@@ -131,8 +162,8 @@ def offer_command(command: str, explanation: str = "", request: str | None = Non
     if is_dangerous(command):
         return ("That command could delete files or change your system, so I won't run it. "
                 "It's on screen if you want to check it and run it yourself.")
-    if ask and config.CONFIRM_BEFORE_RUNNING:
-        if not dialog.confirm(f"{explanation} Should I run it?".strip()):
+    if ask and (config.ALWAYS_ASK_BEFORE_RUNNING or not is_read_only(command)):
+        if not dialog.confirm(f"{explanation} This one changes things on your computer. Should I run it?".strip()):
             return "Okay, I won't run it."
     code, output = run_shell(command)
     last_command, last_was_script = command, False
@@ -245,9 +276,12 @@ def _offer_run(path: Path, message: str) -> str:
     if DELETES_FILES.search(code):
         question = (message + " Warning: this program deletes or moves files. Check the code on screen first. "
                     "Do you still want me to run it?")
-    else:
+    elif config.ALWAYS_ASK_BEFORE_RUNNING:
         question = message + " Want me to run it?"
-    if (not config.CONFIRM_BEFORE_RUNNING and not DELETES_FILES.search(code)) or dialog.confirm(question):
+    else:
+        dialog.say(message + " Running it now.", wait=False)
+        return run_script(path, checked=True)
+    if dialog.confirm(question):
         return run_script(path, checked=True)
     return "Okay. Say run it whenever you're ready."
 
@@ -320,12 +354,9 @@ def run_script(path: Path | None = None, checked: bool = False) -> str:
             subprocess.run([sys.executable, "-m", "pip", "install", package], capture_output=True)
             continue
 
-        error = _last_line(output)
         if attempt == 2 or not brain.get().ready:
             break
-        if not dialog.confirm(f"It crashed with this error: {_speakable(error)}. Want me to try to fix it?"):
-            return "Okay, I'll leave it as it is. The error is on screen."
-        dialog.say("Let me fix that.", wait=False)
+        dialog.say(f"It crashed with {_speakable(_last_line(output), 90)}. Fixing it.", wait=False)
         try:
             code = brain.get().fix_code(code, _language_for(path), output, dialog.stream_code)
         except Exception as e:

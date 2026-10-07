@@ -7,7 +7,6 @@ programming questions, terminal commands and writing code (config.CODER_MODEL).
 import json
 import re
 import sys
-import threading
 import time
 from datetime import datetime
 from pathlib import Path
@@ -17,10 +16,40 @@ import config
 from console import status
 
 SENTENCE_END = re.compile(r"(?<=[.!?])\s+")
-CODE_TOPIC = re.compile(
-    r"\b(python|code|coding|program|programming|script|function|variable|loop|bug|error|exception|terminal|"
-    r"command line|powershell|bash|shell|javascript|typescript|html|css|sql|git|github|api|class|syntax|compile|"
-    r"debug|regex|json|list comprehension|dictionary|array|string|integer|library|module|pip|npm|linux command)\b", re.I)
+CODE_TOPIC = re.compile(  # questions that go to the coding model (kept narrow, because it's slower)
+    r"\b(python|javascript|typescript|java|rust|golang|html|css|sql|regex|json|coding|programming|source code|code|"
+    r"powershell|bash|terminal|command line|github|git|pip|npm|compile|compiler|debug|debugging|syntax|"
+    r"list comprehension|for loop|while loop|data structure|algorithm)\b", re.I)
+KEEP_ALIVE = "5m"  # free a model's memory after this long unused (an 8 GB laptop can't hold both at once)
+
+# Requests that sound like the user wants something done go through pick_command before plain chat
+ACTION_HINT = re.compile(r"\b(i want|i'd like|i wanna|i need|let's|put on|get me|show me|bring up|turn|can you|"
+                         r"could you|would you|will you|please|start|stop|make it|go to|take me|listen|watch|hear)\b",
+                         re.I)
+ROUTABLE = re.compile(r"^(play|pause|resume|next|previous|volume|turn|mute|unmute|open|new tab|search|set a timer|"
+                      r"what time|what's the weather|take a note|read my notes|tell me a joke|take a screenshot|"
+                      r"how much battery|close this tab|close the \w+ tab|switch to|refresh)\b", re.I)
+PICK_COMMAND_PROMPT = """You turn what the user said into ONE short command for a voice assistant. Commands look like:
+play <song, artist, genre or video>
+pause / resume / next song / previous song
+turn the volume up / turn the volume down / set the volume to <number> percent / mute
+open <app or website> / open a new tab to <website> / close this tab / close the <name> tab
+search for <query> / set a timer for <number> minutes / what's the weather / take a note <text>
+tell me a joke / take a screenshot / how much battery
+
+Examples:
+I'd like to hear some jazz -> play jazz
+put on something relaxing for studying -> play relaxing study music
+I want to watch funny cat videos -> play funny cat videos
+I need to wake up in twenty minutes -> set a timer for 20 minutes
+can you pull up my email -> open gmail
+show me what's happening in the world -> open news.google.com
+it's way too loud -> turn the volume down
+let me write down that the rent is due friday -> take a note the rent is due friday
+why is the sky blue -> NONE
+how are you today -> NONE
+
+Reply with only the command, or NONE if it's a question or chat rather than something to do."""
 
 OS_NAME = "Windows" if sys.platform == "win32" else "Linux"
 SHELL = "PowerShell" if sys.platform == "win32" else "bash"
@@ -61,8 +90,6 @@ class Brain:
                 status(f"{label} AI ready ({model}).")
             else:
                 status(f"{label} AI model isn't downloaded. Run:  ollama pull {model}")
-        if self.ready:  # load the chat model into memory now, so the first question doesn't wait for it
-            threading.Thread(target=self._warm_up, daemon=True).start()
 
     @property
     def ready(self) -> bool:
@@ -83,13 +110,21 @@ class Brain:
     def code_model(self) -> str:
         return config.CODER_MODEL if self.coder_ready else config.OLLAMA_MODEL
 
-    def _warm_up(self) -> None:
+    _loaded: str | None = None
+
+    def _use(self, model: str) -> str:
+        """Unload any other model before using this one, so two never sit in memory together."""
         import ollama
 
-        try:
-            ollama.generate(model=self.chat_model, prompt="", keep_alive="30m")
-        except Exception:
-            pass
+        if self._loaded != model:
+            try:
+                for running in ollama.ps().models:
+                    if running.model != _tag(model):
+                        ollama.generate(model=running.model, prompt="", keep_alive=0)
+            except Exception:
+                pass
+        self._loaded = model
+        return model
 
     @staticmethod
     def _extra(model: str) -> dict:
@@ -120,11 +155,11 @@ class Brain:
         import ollama
 
         coding = bool(CODE_TOPIC.search(text))
-        model = self.code_model if coding else self.chat_model
+        model = self._use(self.code_model if coding else self.chat_model)
         messages = [{"role": "system", "content": self.system_prompt(coding)}, *self.history,
                     {"role": "user", "content": text}]
         splitter = _ProseCodeSplitter(speak, show_code)
-        for chunk in ollama.chat(model=model, messages=messages, stream=True, keep_alive="30m",
+        for chunk in ollama.chat(model=model, messages=messages, stream=True, keep_alive=KEEP_ALIVE,
                                  options={"num_predict": 900 if coding else 220, "num_ctx": 4096},
                                  **self._extra(model)):
             splitter.feed(chunk.message.content or "")
@@ -140,9 +175,27 @@ class Brain:
         prompt = (f"The user asked: {request}\nA command was run and printed:\n{output[:3000]}\n\n"
                   "Answer the user's request in one or two short spoken sentences, based only on that output. "
                   "No markdown.")
-        r = ollama.chat(model=self.chat_model, messages=[{"role": "user", "content": prompt}], keep_alive="30m",
-                        options={"num_predict": 120, "num_ctx": 4096}, **self._extra(self.chat_model))
+        model = self._use(self._loaded or self.chat_model)  # whichever is already in memory, to avoid a reload
+        r = ollama.chat(model=model, messages=[{"role": "user", "content": prompt}], keep_alive=KEEP_ALIVE,
+                        options={"num_predict": 120, "num_ctx": 4096}, **self._extra(model))
         return clean(r.message.content or "") or "Done. The output is on screen."
+
+    def pick_command(self, text: str) -> str | None:
+        """Map a loosely worded request ("I want to hear some jazz") onto a built-in command, or None."""
+        import ollama
+
+        if not ACTION_HINT.search(text):
+            return None
+        model = self._use(self.chat_model)
+        r = ollama.chat(model=model, keep_alive=KEEP_ALIVE,
+                        messages=[{"role": "system", "content": PICK_COMMAND_PROMPT},
+                                  {"role": "user", "content": text + " ->"}],
+                        options={"temperature": 0, "num_predict": 30}, **self._extra(model))
+        command = clean(r.message.content or "").splitlines()[0] if (r.message.content or "").strip() else ""
+        command = re.split(r"\s*(?:\||/|->)\s*", command)[0].strip(" '\".,").lower()
+        if not command or "<" in command or command == "none" or not ROUTABLE.match(command):
+            return None
+        return command
 
     # -------------------------------------------------------------- terminal
     def make_command(self, request: str) -> tuple[str, str]:
@@ -157,7 +210,7 @@ class Brain:
         )
         schema = {"type": "object", "required": ["command", "explanation"],
                   "properties": {"command": {"type": "string"}, "explanation": {"type": "string"}}}
-        r = ollama.chat(model=self.code_model, format=schema, keep_alive="30m",
+        r = ollama.chat(model=self._use(self.code_model), format=schema, keep_alive=KEEP_ALIVE,
                         messages=[{"role": "system", "content": system}, {"role": "user", "content": request}],
                         options={"temperature": 0.1, "num_predict": 300}, **self._extra(self.code_model))
         data = json.loads(r.message.content)
@@ -168,7 +221,7 @@ class Brain:
         import ollama
 
         text = ""
-        stream = ollama.chat(model=self.code_model, messages=messages, stream=True, keep_alive="30m",
+        stream = ollama.chat(model=self._use(self.code_model), messages=messages, stream=True, keep_alive=KEEP_ALIVE,
                              options={"num_predict": 3000, "num_ctx": 8192, "temperature": 0.2},
                              **self._extra(self.code_model))
         for chunk in stream:

@@ -42,7 +42,7 @@ class Ears:
         self.threshold = max(ambient * 2.5, 250.0)
         status(f"Mic ready (noise level {ambient:.0f}, trigger level {self.threshold:.0f}).")
 
-    def record(self, wait_seconds: float | None = None, silence_seconds: float = 0.9,
+    def record(self, wait_seconds: float | None = None, silence_seconds: float = 1.2,
                max_seconds: float = 15) -> np.ndarray | None:
         """Wait for speech, then record until a pause. Returns 16 kHz int16 audio, or None."""
         per_sec = self.RATE / self.BLOCK
@@ -82,6 +82,19 @@ class Ears:
             return None
         return text
 
-    def listen(self, wait_seconds: float | None = None) -> str | None:
+    def listen(self, wait_seconds: float | None = None, wake_check=None) -> str | None:
+        """Record and transcribe one utterance.
+
+        With `wake_check` (a function that says whether text contains the wake word), only the first few
+        seconds are transcribed at first. Long sounds without "Jarvis" near the start - music, a video, a
+        conversation in the room - are then skipped cheaply instead of keeping the CPU busy.
+        """
         audio = self.record(wait_seconds)
-        return None if audio is None else self.transcribe(audio)
+        if audio is None:
+            return None
+        head = 4 * self.RATE
+        if wake_check is not None and len(audio) > head + self.RATE:
+            start = self.transcribe(audio[:head])
+            if not start or not wake_check(start):
+                return start
+        return self.transcribe(audio)

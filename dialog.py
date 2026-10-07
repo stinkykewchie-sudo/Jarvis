@@ -40,16 +40,9 @@ def ask(question: str, wait_seconds: float = 8) -> str | None:
 
 
 def confirm(question: str) -> bool:
-    """Ask a yes/no question. Anything unclear counts as no after one retry."""
-    for attempt in range(2):
-        answer = ask(question if attempt == 0 else "Sorry, was that a yes or a no?")
-        if answer is None:
-            return False
-        if NO.search(answer):
-            return False
-        if YES.search(answer):
-            return True
-    return False
+    """Ask a yes/no question once. Silence or anything unclear counts as no."""
+    answer = ask(question)
+    return bool(answer) and not NO.search(answer) and bool(YES.search(answer))
 
 
 def show_command(command: str) -> None:

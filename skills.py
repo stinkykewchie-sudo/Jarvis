@@ -11,7 +11,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Callable
 from urllib.parse import quote_plus
-from urllib.request import urlopen
+from urllib.request import Request, urlopen
 
 import browser
 import coder
@@ -112,6 +112,44 @@ def open_thing(name: str) -> str:
         webbrowser.open("https://" + WEBSITES[name])
         return f"Opening {name} in your browser."
     return f"I couldn't find anything called {name} on this computer."
+
+
+MUSIC_REQUEST = re.compile(
+    r"(?:play|put on|throw on|start|queue up|blast)(?: me)?(?: some| a| any| something| the)? ?"
+    r"(?:music|songs?|tunes|something|a song|some tunes|good music|anything)"
+    r"|(?:i want to|i'd like to|i wanna|let's|let me) (?:listen to|hear) (?:some |a )?(?:music|songs?|something|tunes)"
+    r"|(?:music|some music) please")
+
+
+def first_youtube_video(query: str) -> str | None:
+    """The watch URL of the top YouTube result for `query`, or None (offline, or YouTube changed its page)."""
+    try:
+        req = Request("https://www.youtube.com/results?search_query=" + quote_plus(query),
+                      headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)", "Accept-Language": "en-US,en"})
+        with urlopen(req, timeout=6) as r:
+            html = r.read().decode("utf-8", "ignore")
+    except OSError:
+        return None
+    m = re.search(r'"videoRenderer":\{"videoId":"([\w-]{11})"', html)
+    return f"https://www.youtube.com/watch?v={m.group(1)}" if m else None
+
+
+def play_youtube(query: str, spoken: str | None = None) -> str:
+    """Open the top YouTube video for `query` so it starts playing; fall back to the search results."""
+    query = re.sub(r"^(?:some|the|a|me)\s+", "", query.strip(" ."))
+    url = first_youtube_video(query)
+    webbrowser.open(url or "https://www.youtube.com/results?search_query=" + quote_plus(query))
+    return f"Playing {spoken or query}." if url else f"Here's {spoken or query} on YouTube."
+
+
+def play_spotify(query: str) -> str:
+    """Show Spotify search results for `query` in the app if it's installed, otherwise on the web."""
+    try:
+        system.open_path("spotify:search:" + quote_plus(query))
+        return f"Here's {query} on Spotify."
+    except OSError:
+        webbrowser.open("https://open.spotify.com/search/" + quote_plus(query))
+        return f"Here's {query} on Spotify's website."
 
 
 def close_app(name: str) -> str:
@@ -492,6 +530,10 @@ def handle(text: str, depth: int = 0) -> str | None:
         return weather(t)
 
     # --- media and volume ---
+    if re.search(r"\b(too loud|way too loud|hurts my ears)\b", t):
+        return system.volume_change(-12) or "Turning it down."
+    if re.search(r"\b(too quiet|too soft|can't hear (it|that|anything))\b", t):
+        return system.volume_change(12) or "Turning it up."
     if re.search(r"\b(volume|louder|quieter|softer|turn it (up|down)|turn (the sound|the music) (up|down))\b", t):
         return volume(t)
     if re.fullmatch(r"(un)?mute( the)?( sound| audio| volume| computer| music)?", t):
@@ -500,19 +542,28 @@ def handle(text: str, depth: int = 0) -> str | None:
         return system.media("next") or ""
     if re.fullmatch(r"(previous|last|go back( to the)?( previous| last)?)( song| track| video)|play the (previous|last) (song|track)", t):
         return system.media("previous") or ""
-    if re.fullmatch(r"(pause|resume|stop|unpause|play|continue|keep playing)( the| my)?( music| song| video| playback| it| spotify)?|play (some )?music", t):
+    if re.fullmatch(r"(pause|stop)( the| my| this)?( music| song| video| playback| it| spotify| youtube)?", t):
+        return system.media("play_pause") or "Paused."
+    if re.fullmatch(r"(resume|unpause|continue|keep playing|play)( the| my)?( music| song| video| playback| it)?", t) \
+            and not re.fullmatch(r"play (the |my )?(music|song)", t):
         return system.media("play_pause") or ""
 
-    # --- YouTube and search ---
+    # --- music and YouTube ---
+    if MUSIC_REQUEST.fullmatch(t):
+        return play_youtube(config.DEFAULT_MUSIC, "some music")
     m = re.fullmatch(r"(?:search youtube for|search on youtube for|youtube search(?: for)?|find (.+?) on youtube)\s*(.*)", t)
     if m:
         q = m.group(1) or m.group(2)
         webbrowser.open("https://www.youtube.com/results?search_query=" + quote_plus(q))
         return f"Searching YouTube for {q}."
-    m = re.fullmatch(r"play (.+?)(?: on youtube| from youtube| video)?", t)
+    m = re.fullmatch(r"(?:play|put on|throw on|queue up)(?: me)? (.+?) on spotify", t)
     if m:
-        webbrowser.open("https://www.youtube.com/results?search_query=" + quote_plus(m.group(1)))
-        return f"Here's {m.group(1)} on YouTube."
+        return play_spotify(m.group(1))
+    m = (re.fullmatch(r"(?:play|put on|throw on|queue up|blast)(?: me)? (.+?)(?: on youtube| from youtube| video| for me)?", t)
+         or re.fullmatch(r"(?:i want to|i'd like to|i wanna|let's|let me) (?:listen to|hear|watch) (.+)", t)
+         or re.fullmatch(r"(?:listen to|watch) (.+?)(?: on youtube)?", t))
+    if m:
+        return play_youtube(m.group(1))
     m = re.fullmatch(r"(?:search(?: the web| google| online| the internet)?(?: for)?|google|look up|look for) (.+)", t)
     if m:
         webbrowser.open("https://www.google.com/search?q=" + quote_plus(m.group(1)))

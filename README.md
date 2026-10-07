@@ -23,8 +23,9 @@ Jarvis: That's 12.
 | "open a new tab to YouTube", "open reddit.com in a new tab", "new tab" | Opens browser tabs |
 | "close this tab", "close the YouTube tab", "close the last 3 tabs", "reopen the last closed tab" | Closes tabs, including by name |
 | "switch to the Gmail tab", "next tab", "refresh the page", "go back" | Moves around your tabs |
-| "play lo-fi beats on YouTube", "search for pizza near me" | Opens YouTube or Google results in your browser |
-| "pause", "next song", "previous track", "mute" | Controls whatever music or video is playing |
+| "play some music", "play Drake", "I want to listen to jazz", "put on lo-fi beats" | Finds the top YouTube video and plays it |
+| "search for pizza near me", "search YouTube for guitar lessons" | Opens Google or YouTube results |
+| "pause", "resume", "next song", "previous track", "mute", "it's too loud" | Controls whatever music or video is playing |
 | "turn the volume up a lot", "set the volume to 40 percent" | Changes the system volume |
 | "set a timer for 10 minutes", "remind me to call mom in 2 hours", "cancel timers" | Timers that Jarvis announces out loud |
 | "take a note: buy milk", "add eggs to my shopping list", "read my notes", "clear my notes" | Notes saved to `jarvis_notes.txt` |
@@ -110,15 +111,17 @@ code before running anything important. With 16 GB of RAM or a good graphics car
 
 - Code Jarvis writes is saved in a **Jarvis Projects** folder in your home folder and opened in VS Code (or Notepad).
   Say "open my projects folder" to see everything.
-- If a program crashes, Jarvis reads the error and offers to fix it, up to three tries. If it needs a Python package,
-  it asks before installing it.
+- Jarvis runs a new program straight away. If it crashes, Jarvis reads the error and fixes it, up to two times.
+  If it needs a Python package, it asks before installing it.
 - Programs that wait for typing, draw windows, or run forever (games, `input()`, tkinter, servers) open in their own
   terminal window.
 - Typed mode (`--type`) is handy for longer coding requests.
 
 ### Safety
 
-- Jarvis shows every terminal command and asks before running it. It also asks before running a program it wrote.
+- Jarvis shows every terminal command on screen. Commands that only look things up (like `ipconfig` or `df -h`) run
+  straight away; anything that changes something asks first. Set `ALWAYS_ASK_BEFORE_RUNNING = True` in `config.py`
+  to be asked every time.
 - **It never deletes files by voice.** Commands that delete files, format disks, shut down, change system settings
   or accounts, use `sudo`, or download-and-run scripts are refused even if you say yes. They're shown on screen so
   you can run them yourself if you really mean to.
@@ -166,7 +169,8 @@ Edit `config.py`:
 | `SPEAKING_RATE` | Talking speed |
 | `OLLAMA_MODEL`, `CODER_MODEL` | Which local AI models to chat and code with |
 | `PROJECTS_DIR` | Where the code Jarvis writes is saved |
-| `CONFIRM_BEFORE_RUNNING` | Ask before running commands and programs (dangerous commands are always refused) |
+| `ALWAYS_ASK_BEFORE_RUNNING` | Ask before every command and program, not just ones that change things |
+| `DEFAULT_MUSIC` | What "play some music" puts on |
 | `FOLLOW_UP_SECONDS` | How long Jarvis keeps listening after answering |
 | `WEATHER_ONLINE` | Set to `False` to keep Jarvis fully offline |
 
@@ -181,6 +185,10 @@ Edit `config.py`:
   or Vivaldi). On Linux, install `xdotool` and use an X11 session.
 - **Chat or coding says the AI isn't responding.** Make sure Ollama is running: open it from the Start menu (Windows)
   or run `ollama serve` (Linux).
+- **A YouTube video opens but doesn't start playing (Firefox).** Firefox blocks videos with sound from starting by
+  themselves. On YouTube, click the icon at the left of the address bar, and set **Autoplay** to
+  **Allow Audio and Video**.
+- **Jarvis did something odd.** `jarvis.log` lists what it heard, which command it chose, and how long it took.
 
 ## Adding your own commands
 
@@ -199,8 +207,10 @@ They don't open, close or run anything.
 
 ## Privacy
 
-Audio is processed on your computer and never recorded to disk. Your notes and the things you teach Jarvis stay in
-local files. Only the weather command contacts the internet, and only when you ask for the weather. Weather data is provided by [Open-Meteo.com](https://open-meteo.com/).
+Audio is processed on your computer and never recorded to disk. Your notes, the things you teach Jarvis, and
+`jarvis.log` (the text of what you asked and what Jarvis did) stay in local files. Jarvis only contacts the internet
+when you ask for the weather (from [Open-Meteo.com](https://open-meteo.com/)) or ask it to play something (it looks up
+the top YouTube result).
 
 ## License
 

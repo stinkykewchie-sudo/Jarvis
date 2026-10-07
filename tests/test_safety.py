@@ -8,7 +8,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from coder import DELETES_FILES, is_dangerous  # noqa: E402
+import jarvis  # noqa: E402
+from coder import DELETES_FILES, is_dangerous, is_read_only  # noqa: E402
 
 BLOCKED = [
     r"Remove-Item -Path C:\\",  # a real command a small model produced for "delete my documents"
@@ -58,8 +59,27 @@ def test_programs_that_delete_are_flagged():
     assert not DELETES_FILES.search("print('hello')\nopen('a.txt').read()\n")
 
 
+def test_read_only_commands_run_without_asking():
+    for c in ["ipconfig /all | findstr IPv4", "Get-PSDrive C", "Get-Process | Sort-Object CPU -Descending | Select-Object -First 5",
+              "systeminfo", "ping -n 4 google.com", "df -h", "ls -la ~/Downloads", "uname -a", "free -h | grep Mem"]:
+        assert is_read_only(c), c
+    for c in ["New-Item -ItemType Directory demo", "Copy-Item a b", "echo hi > file.txt", "mkdir demo",
+              "Get-Process | Stop-Process", "Start-Process notepad", "pip install requests", "cp a b",
+              "find . -name x -exec chmod 600 {} ;", "Get-ChildItem | ForEach-Object { $_ }", "ls; rm x"]:
+        assert not is_read_only(c), c
+
+
+def test_follow_up_ignores_lyrics():
+    for heard in ["what about tomorrow", "and open YouTube", "play the next one", "thanks", "turn it up"]:
+        assert jarvis.FOLLOW_UP.match(heard), heard
+    for heard in ["baby baby baby oh", "I've been running through the jungle", "na na na na", "she said that"]:
+        assert not jarvis.FOLLOW_UP.match(heard), heard
+
+
 if __name__ == "__main__":
     test_blocked()
     test_allowed()
     test_programs_that_delete_are_flagged()
+    test_read_only_commands_run_without_asking()
+    test_follow_up_ignores_lyrics()
     print("\nAll checks passed.")
