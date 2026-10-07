@@ -49,7 +49,7 @@ New-Item -ItemType Directory -Force $menu | Out-Null
 # The main icon opens the window; extra Start-menu entries for the terminal versions
 New-JarvisShortcut $desktop $pythonw "`"$gui`"" "Jarvis - your personal assistant"
 New-JarvisShortcut (Join-Path $menu "Jarvis.lnk") $pythonw "`"$gui`"" "Jarvis - your personal assistant"
-New-JarvisShortcut (Join-Path $menu "Jarvis (voice terminal).lnk") $bat "" "Jarvis in a terminal, voice mode"
+New-JarvisShortcut (Join-Path $menu "Jarvis (voice terminal).lnk") $bat "--terminal" "Jarvis in a terminal, voice mode"
 New-JarvisShortcut (Join-Path $menu "Jarvis (type commands).lnk") $bat "--type" "Jarvis in a terminal, typed mode"
 if ($Startup) {
     New-JarvisShortcut $autostart $pythonw "`"$gui`" --tray" "Starts Jarvis in the system tray when you log in" 7
