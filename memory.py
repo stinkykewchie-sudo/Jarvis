@@ -13,9 +13,11 @@ Saved in jarvis_memory.json next to this file, which you can also edit by hand:
 
 import json
 import re
+
+import paths
 from pathlib import Path
 
-FILE = Path(__file__).with_name("jarvis_memory.json")
+FILE = paths.data_file("jarvis_memory.json")
 
 _data: dict | None = None
 

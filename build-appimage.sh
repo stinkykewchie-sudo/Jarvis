@@ -46,9 +46,26 @@ echo "     using $py"
 echo "4/6  Installing Jarvis's Python packages into the bundle (this is the slow part)..."
 "$py" -m pip install --no-warn-script-location -r "$here/requirements.txt"
 
-echo "5/6  Adding Jarvis's code, launcher and icon..."
+echo "5/6  Adding Jarvis's code, launcher, icon and audio library..."
 mkdir -p "$appdir/opt/jarvis"
 cp "$here"/*.py "$appdir/opt/jarvis/"
+
+# Bundle PortAudio (and espeak-ng) so the microphone and voice work without installing anything on the host.
+mkdir -p "$appdir/usr/lib"
+copied_audio=""
+for lib in libportaudio.so.2 libespeak-ng.so.1; do
+    src="$(ldconfig -p 2>/dev/null | grep -oE "/[^ ]*${lib//./\\.}" | head -1)"
+    if [ -n "$src" ] && [ -e "$src" ]; then
+        cp -Lv "$src" "$appdir/usr/lib/" && copied_audio="yes"
+    fi
+done
+if [ -z "$copied_audio" ]; then
+    echo "     note: libportaudio wasn't found on this build machine, so voice won't work until the host has it."
+    echo "           install it first (sudo apt install libportaudio2 espeak-ng) and re-run for a self-contained build."
+fi
+# espeak-ng's data (for the fallback voice), if present
+espeak_data="$(dirname "$(find /usr -maxdepth 4 -type d -name 'espeak-ng-data' 2>/dev/null | head -1)" 2>/dev/null)"
+[ -d "$espeak_data/espeak-ng-data" ] && cp -r "$espeak_data/espeak-ng-data" "$appdir/usr/share/" 2>/dev/null || true
 [ -f "$here/jarvis.png" ] || "$py" "$here/make_icon.py" || true
 cp "$here/jarvis.png" "$appdir/jarvis.png" 2>/dev/null || true
 cp "$here/jarvis.png" "$appdir/opt/jarvis/jarvis.png" 2>/dev/null || true

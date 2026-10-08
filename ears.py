@@ -9,7 +9,9 @@ import sounddevice as sd
 import config
 from console import status
 
-MODELS_DIR = Path(__file__).with_name("models")
+import paths
+
+MODELS_DIR = paths.model_dir("models")
 
 # Phrases Whisper tends to "hear" in background noise
 HALLUCINATIONS = {"you", "thank you", "thanks for watching", "thank you for watching", "bye", "okay", "so", ""}

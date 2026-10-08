@@ -18,9 +18,10 @@ import coder
 import config
 import dialog
 import memory
+import paths
 import system
 
-NOTES_FILE = Path(__file__).with_name("jarvis_notes.txt")
+NOTES_FILE = paths.data_file("jarvis_notes.txt")
 
 # Set by jarvis.py so timers can speak when they finish
 announce: Callable[[str], None] = print

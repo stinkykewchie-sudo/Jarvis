@@ -10,6 +10,7 @@ from pathlib import Path
 import numpy as np
 
 import config
+import paths
 from console import say_line, status
 
 try:
@@ -18,7 +19,7 @@ except Exception as e:  # OSError if the PortAudio library is missing, ImportErr
     sd = None
     status(f"(audio output library not available, using the system voice: {e})")
 
-VOICES_DIR = Path(__file__).with_name("voices")
+VOICES_DIR = paths.model_dir("voices")
 
 
 def ensure_piper_voice() -> Path | None:

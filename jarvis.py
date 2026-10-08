@@ -23,6 +23,7 @@ from pathlib import Path
 import brain
 import config
 import dialog
+import paths
 import skills
 import system
 from console import status, warn, you_line
@@ -47,7 +48,7 @@ log = logging.getLogger("jarvis")
 
 def setup_log() -> None:
     """Keep a small log of what Jarvis heard and did, in jarvis.log next to this file (stays on your PC)."""
-    handler = RotatingFileHandler(Path(__file__).with_name("jarvis.log"), maxBytes=500_000, backupCount=1,
+    handler = RotatingFileHandler(paths.data_file("jarvis.log"), maxBytes=500_000, backupCount=1,
                                   encoding="utf-8")
     handler.setFormatter(logging.Formatter("%(asctime)s  %(message)s", "%Y-%m-%d %H:%M:%S"))
     log.addHandler(handler)
