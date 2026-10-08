@@ -51,23 +51,46 @@ cp "$here"/*.py "$appdir/opt/jarvis/"
 cp "$here/jarvis.png" "$appdir/jarvis.png" 2>/dev/null || true
 cp "$here/jarvis.png" "$appdir/opt/jarvis/jarvis.png" 2>/dev/null || true
 
-# AppRun finds the bundled python at runtime and sets its environment, so it doesn't depend on the exact
-# folder/version name inside the base image.
+# AppRun finds the bundled Python and Tcl/Tk at runtime (layout varies by base image), sets up their
+# environment, and - crucially for a windowed app with no terminal - shows any startup error in a popup
+# and writes it to ~/jarvis-appimage.log, so you can read what went wrong without a console.
 cat > "$appdir/AppRun" <<'APPRUN'
 #!/bin/bash
 HERE="$(dirname "$(readlink -f "$0")")"
 export APPDIR="$HERE"
+LOG="$HOME/jarvis-appimage.log"
+
+show_error() {
+    local msg="$1"
+    if command -v zenity >/dev/null 2>&1; then zenity --error --no-wrap --title="Jarvis" --text="$msg"
+    elif command -v kdialog >/dev/null 2>&1; then kdialog --title "Jarvis" --error "$msg"
+    elif command -v xmessage >/dev/null 2>&1; then xmessage -center "$msg"
+    else printf '%s\n' "$msg" >&2; fi
+}
+
 PYBIN=""
 for c in "$HERE"/opt/python*/bin/python3.[0-9][0-9] "$HERE"/opt/python*/bin/python3.[0-9] "$HERE"/opt/python*/bin/python3; do
     [ -x "$c" ] && PYBIN="$c" && break
 done
-if [ -z "$PYBIN" ]; then echo "Jarvis: bundled Python not found in the AppImage" >&2; exit 1; fi
+if [ -z "$PYBIN" ]; then show_error "Jarvis: the bundled Python was not found in the AppImage."; exit 1; fi
+
 PYROOT="$(dirname "$(dirname "$PYBIN")")"
 export PYTHONHOME="$PYROOT"
-export LD_LIBRARY_PATH="$PYROOT/lib:$HERE/usr/lib:$LD_LIBRARY_PATH"
+export LD_LIBRARY_PATH="$PYROOT/lib:$HERE/usr/lib:$HERE/usr/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH"
 export PATH="$PYROOT/bin:$PATH"
 export PYTHONPATH="$HERE/opt/jarvis:$PYTHONPATH"
-exec "$PYBIN" "$HERE/opt/jarvis/gui.py" "$@"
+
+# Tk needs its data files found explicitly, or the window fails to open
+TCLDIR="$(find "$HERE" -maxdepth 6 -type d -name 'tcl8.*' 2>/dev/null | head -1)"
+TKDIR="$(find "$HERE" -maxdepth 6 -type d -name 'tk8.*' 2>/dev/null | head -1)"
+[ -n "$TCLDIR" ] && export TCL_LIBRARY="$TCLDIR"
+[ -n "$TKDIR" ] && export TK_LIBRARY="$TKDIR"
+
+"$PYBIN" "$HERE/opt/jarvis/gui.py" "$@" 2>"$LOG" && exit 0
+show_error "Jarvis couldn't start. Details saved to $LOG
+
+$(tail -n 20 "$LOG")"
+exit 1
 APPRUN
 chmod +x "$appdir/AppRun"
 
@@ -104,8 +127,9 @@ or install the library once:   sudo apt install libfuse2    (on Ubuntu 24.04: su
 
 Before it fully works on a given machine:
   * Microphone needs PortAudio on the host:   sudo apt install libportaudio2   (dnf: portaudio, pacman: portaudio)
-  * The window needs Tk. The bundled Python usually includes it; if the window won't open, run the AppImage
-    from a terminal to see the error and tell me.
+  * The window needs Tk (included in the bundled Python; the launcher points it at the bundled Tcl/Tk data).
+    If anything goes wrong at startup, a popup shows the error and it's saved to ~/jarvis-appimage.log -
+    no terminal needed.
   * Chat and coding need Ollama: install it on the host (https://ollama.com) and pull the models, OR carry a
     portable Ollama folder next to the AppImage and turn on portable mode (see make-portable.py / README).
 
