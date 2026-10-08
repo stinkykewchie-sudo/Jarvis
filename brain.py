@@ -235,7 +235,7 @@ class Brain:
                     {"role": "user", "content": text}]
         splitter = _ProseCodeSplitter(speak, show_code)
         for chunk in _oll().chat(model=model, messages=messages, stream=True, keep_alive=KEEP_ALIVE,
-                                 options={"num_predict": 900 if coding else 220, "num_ctx": 4096},
+                                 options={"num_predict": 700 if coding else 200, "num_ctx": 2048},
                                  **self._extra(model)):
             splitter.feed(chunk.message.content or "")
         reply = splitter.finish()
@@ -251,7 +251,7 @@ class Brain:
                   "No markdown.")
         model = self._use(self._loaded or self.chat_model)  # whichever is already in memory, to avoid a reload
         r = _oll().chat(model=model, messages=[{"role": "user", "content": prompt}], keep_alive=KEEP_ALIVE,
-                        options={"num_predict": 120, "num_ctx": 4096}, **self._extra(model))
+                        options={"num_predict": 120, "num_ctx": 2048}, **self._extra(model))
         return clean(r.message.content or "") or "Done. The output is on screen."
 
     def pick_command(self, text: str) -> str | None:
@@ -293,7 +293,7 @@ class Brain:
 
         text = ""
         stream = _oll().chat(model=self._use(self.code_model), messages=messages, stream=True, keep_alive=KEEP_ALIVE,
-                             options={"num_predict": 3000, "num_ctx": 8192, "temperature": 0.2},
+                             options={"num_predict": 2500, "num_ctx": 4096, "temperature": 0.2},
                              **self._extra(self.code_model))
         for chunk in stream:
             piece = chunk.message.content or ""
