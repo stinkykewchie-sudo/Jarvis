@@ -17,6 +17,28 @@ MODELS_DIR = paths.model_dir("models")
 HALLUCINATIONS = {"you", "thank you", "thanks for watching", "thank you for watching", "bye", "okay", "so", ""}
 
 
+def input_device():
+    """Pick a real microphone. When several audio backends exist (ALSA/OSS/PulseAudio), PortAudio can default
+    to a silent ALSA device, so prefer the PulseAudio/PipeWire input other apps use. Returns an index or None."""
+    try:
+        apis = sd.query_hostapis()
+        for want in ("pulse", "pipewire"):
+            for api in apis:
+                idx = api.get("default_input_device", -1)
+                if want in api["name"].lower() and idx is not None and idx >= 0:
+                    return idx
+        # otherwise the first device that actually has input channels
+        default_in = sd.default.device[0] if isinstance(sd.default.device, (list, tuple)) else sd.default.device
+        if isinstance(default_in, int) and default_in >= 0 and sd.query_devices(default_in).get("max_input_channels", 0) > 0:
+            return default_in
+        for i, d in enumerate(sd.query_devices()):
+            if d.get("max_input_channels", 0) > 0:
+                return i
+    except Exception:
+        pass
+    return None
+
+
 class Ears:
     RATE = 16000
     BLOCK = 480  # 30 ms
@@ -28,13 +50,20 @@ class Ears:
         self.model = WhisperModel(config.WHISPER_MODEL, device="cpu", compute_type="int8",
                                   download_root=str(MODELS_DIR))
         self.threshold = 400.0
+        self.device = input_device()
+        if self.device is not None:
+            try:
+                status(f"Microphone: {sd.query_devices(self.device)['name']}")
+            except Exception:
+                pass
 
     @staticmethod
     def _rms(block: np.ndarray) -> float:
         return float(np.sqrt(np.mean(block.astype(np.float32) ** 2)))
 
     def _stream(self):
-        return sd.InputStream(samplerate=self.RATE, channels=1, dtype="int16", blocksize=self.BLOCK)
+        return sd.InputStream(samplerate=self.RATE, channels=1, dtype="int16", blocksize=self.BLOCK,
+                              device=self.device)
 
     def calibrate(self, seconds: float = 1.5) -> None:
         status("Calibrating microphone - stay quiet for a moment...")

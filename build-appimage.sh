@@ -124,6 +124,10 @@ if [ "${1:-}" = "--selftest" ]; then  # used by build-appimage.sh to verify the 
         || echo "SELFTEST_TK_FAIL (see the error just above)"
     exit 0
 fi
+if [ "${1:-}" = "--mictest" ]; then  # check the microphone and print what it heard
+    "$PYBIN" "$HERE/opt/jarvis/mictest.py"
+    exit $?
+fi
 
 "$PYBIN" "$HERE/opt/jarvis/gui.py" "$@" 2>"$LOG" && exit 0
 show_error "Jarvis couldn't start. Details saved to $LOG
