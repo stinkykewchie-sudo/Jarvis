@@ -36,4 +36,5 @@ DEFAULT_MUSIC = "popular music mix"
 
 # Behaviour
 FOLLOW_UP_SECONDS = 8          # after Jarvis answers, keep talking without saying "Jarvis"
+HANDS_FREE = False             # GUI: start listening for "Jarvis" automatically on launch (always-on mode)
 WEATHER_ONLINE = True          # the weather command uses the free Open-Meteo service; set False to stay fully offline
