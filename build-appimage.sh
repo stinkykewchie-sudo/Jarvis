@@ -35,8 +35,11 @@ chmod +x python.AppImage
 echo "3/6  Unpacking it into the AppDir..."
 ./python.AppImage --appimage-extract >/dev/null
 mv squashfs-root "$appdir"
-py="$appdir/opt/python${PYMM}/bin/python${PYMM}"
-[ -x "$py" ] || { echo "Bundled python not found at $py"; ls "$appdir/opt"; exit 1; }
+# find the real python binary (the folder may be opt/python3.12 or a patch-versioned one)
+py="$(find "$appdir/opt" -maxdepth 2 -type f -name 'python3.[0-9]*' 2>/dev/null \
+      | grep -E '/python3\.[0-9]+$' | head -1)"
+[ -n "$py" ] && [ -x "$py" ] || { echo "Bundled python not found under $appdir/opt"; find "$appdir/opt" -maxdepth 2 -name 'python3*'; exit 1; }
+echo "     using $py"
 
 echo "4/6  Installing Jarvis's Python packages into the bundle (this is the slow part)..."
 "$py" -m pip install --no-warn-script-location -r "$here/requirements.txt"
@@ -48,12 +51,23 @@ cp "$here"/*.py "$appdir/opt/jarvis/"
 cp "$here/jarvis.png" "$appdir/jarvis.png" 2>/dev/null || true
 cp "$here/jarvis.png" "$appdir/opt/jarvis/jarvis.png" 2>/dev/null || true
 
-cat > "$appdir/AppRun" <<APPRUN
+# AppRun finds the bundled python at runtime and sets its environment, so it doesn't depend on the exact
+# folder/version name inside the base image.
+cat > "$appdir/AppRun" <<'APPRUN'
 #!/bin/bash
-HERE="\$(dirname "\$(readlink -f "\$0")")"
-export PATH="\$HERE/opt/python${PYMM}/bin:\$PATH"
-export PYTHONPATH="\$HERE/opt/jarvis:\$PYTHONPATH"
-exec "\$HERE/opt/python${PYMM}/bin/python${PYMM}" "\$HERE/opt/jarvis/gui.py" "\$@"
+HERE="$(dirname "$(readlink -f "$0")")"
+export APPDIR="$HERE"
+PYBIN=""
+for c in "$HERE"/opt/python*/bin/python3.[0-9][0-9] "$HERE"/opt/python*/bin/python3.[0-9] "$HERE"/opt/python*/bin/python3; do
+    [ -x "$c" ] && PYBIN="$c" && break
+done
+if [ -z "$PYBIN" ]; then echo "Jarvis: bundled Python not found in the AppImage" >&2; exit 1; fi
+PYROOT="$(dirname "$(dirname "$PYBIN")")"
+export PYTHONHOME="$PYROOT"
+export LD_LIBRARY_PATH="$PYROOT/lib:$HERE/usr/lib:$LD_LIBRARY_PATH"
+export PATH="$PYROOT/bin:$PATH"
+export PYTHONPATH="$HERE/opt/jarvis:$PYTHONPATH"
+exec "$PYBIN" "$HERE/opt/jarvis/gui.py" "$@"
 APPRUN
 chmod +x "$appdir/AppRun"
 
