@@ -12,3 +12,9 @@ jarvis_notes.txt
 jarvis_memory.json
 jarvis.log
 jarvis.log.1
+
+# Portable mode and AppImage build
+ollama-models/
+build-appimage.tmp/
+*.AppImage
+ollama/

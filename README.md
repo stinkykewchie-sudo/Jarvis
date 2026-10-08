@@ -216,6 +216,45 @@ Browser tabs are in `browser.py`, coding and terminal commands in `coder.py`, an
 Run the tests with `python tests/test_commands.py`, `python tests/test_safety.py` and `python tests/test_system.py`.
 They don't open, close or run anything.
 
+## Portable (run from a USB)
+
+Jarvis can live on a USB stick so its big files travel with it. The Jarvis code, the Whisper speech model and the
+Piper voice already sit inside the folder; portable mode also keeps the Ollama AI models here instead of in your
+home folder, and runs a private Ollama server (on port 11435) just for Jarvis.
+
+1. Install Jarvis onto the USB (clone or copy the folder there), and install Ollama.
+2. From the Jarvis folder, run:
+   ```
+   python make-portable.py
+   ```
+   This turns on `PORTABLE` in `config.py` and downloads the models into `ollama-models/` inside the folder (~3.3 GB).
+3. Copy the whole folder to the USB if you didn't already.
+
+On each computer you plug into, run `install.sh` (Linux) or `install.bat` (Windows) **once** - that rebuilds the Python
+environment and installs a few shared libraries on that machine. Then start Jarvis; it uses the models from the folder.
+
+What travels and what doesn't:
+
+- **Travels on the USB:** the code, the speech model, the voice, the Ollama models, your notes and settings.
+- **Rebuilt per machine:** the Python environment (`.venv`) and a few system libraries (PortAudio, Tk, espeak-ng),
+  because those are tied to each machine's OS and Python. The `ollama` program is installed per machine too, unless you
+  drop its binary in an `ollama` folder next to Jarvis so it travels as well.
+- **Format the USB as ext4** if you'll use it on Linux (exFAT/FAT32 can't store the Python environment properly).
+
+For a true plug-in-and-run stick with nothing installed on the host, `build-appimage.sh` builds a single-file Linux
+**AppImage** that bundles Python and the packages. It's experimental and must be built on a Linux machine; pair it with
+a portable Ollama folder on the same stick for chat and coding.
+
+## Uninstalling
+
+- **Windows:** double-click `uninstall.bat`. It removes the shortcuts, the virtual environment and the downloaded
+  models, and offers to remove the Ollama models, then tells you to delete the folder.
+- **Linux:** run `./uninstall.sh`. It removes the menu entries, autostart, the environment and models, and offers to
+  delete the whole folder and the Ollama models.
+
+Both leave the Ollama program itself installed - remove it separately (Windows: Settings → Apps; Linux: see the
+Ollama docs) if you want it gone too.
+
 ## Privacy
 
 Audio is processed on your computer and never recorded to disk. Your notes, the things you teach Jarvis, and

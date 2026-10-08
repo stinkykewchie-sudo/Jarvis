@@ -19,6 +19,12 @@ SPEAKING_RATE = 1.0            # 1.0 = normal, 1.2 = faster, 0.8 = slower
 OLLAMA_MODEL = "qwen3:1.7b"        # conversation; small enough for a laptop. Try "qwen3:4b" on a faster PC
 CODER_MODEL = "qwen2.5-coder:3b"   # code and terminal commands. Try "qwen2.5-coder:7b" with 16 GB of RAM
 
+# Portable / USB mode: keep Jarvis's Ollama models inside this folder (in ollama-models/) and run a
+# private Ollama server just for Jarvis, so the whole folder works from a USB stick. The Whisper model
+# and Piper voice already live in this folder. See the "Portable / USB" section in the README.
+PORTABLE = False
+PORTABLE_OLLAMA_PORT = 11435   # the private server's port (kept separate from a normal Ollama on 11434)
+
 # Coding and terminal commands
 PROJECTS_DIR = "~/Jarvis Projects"  # where the code Jarvis writes is saved
 # Look-up commands (like ipconfig) and programs Jarvis writes run straight away. Commands that change things,

@@ -5,6 +5,7 @@ programming questions, terminal commands and writing code (config.CODER_MODEL).
 """
 
 import json
+import os
 import re
 import sys
 import time
@@ -59,6 +60,82 @@ def _tag(model: str) -> str:
     return model if ":" in model else model + ":latest"
 
 
+# Which Ollama server to talk to. In portable mode Jarvis runs its OWN server on its own port, with the
+# models kept inside the Jarvis folder (ollama-models/), so the whole folder works from a USB stick.
+_PROJECT = Path(__file__).parent
+if config.PORTABLE:
+    os.environ.setdefault("OLLAMA_MODELS", str(_PROJECT / "ollama-models"))
+    OLLAMA_HOST = f"http://127.0.0.1:{config.PORTABLE_OLLAMA_PORT}"
+else:
+    OLLAMA_HOST = os.environ.get("OLLAMA_HOST") or "http://127.0.0.1:11434"
+    if not OLLAMA_HOST.startswith("http"):
+        OLLAMA_HOST = "http://" + OLLAMA_HOST
+
+_client = None
+
+
+def _oll():
+    """The Ollama client, pointed at the right server (cached)."""
+    global _client
+    if _client is None:
+        import ollama
+        _client = ollama.Client(host=OLLAMA_HOST)
+    return _client
+
+
+def _ollama_binary() -> str | None:
+    import shutil
+    bundled = _PROJECT / "ollama" / ("ollama.exe" if sys.platform == "win32" else "ollama")
+    if bundled.exists():
+        return str(bundled)
+    found = shutil.which("ollama")
+    if found:
+        return found
+    if sys.platform == "win32":
+        guess = Path(os.environ.get("LOCALAPPDATA", "")) / "Programs" / "Ollama" / "ollama.exe"
+        return str(guess) if guess.exists() else None
+    return next((p for p in ("/usr/local/bin/ollama", "/usr/bin/ollama") if Path(p).exists()), None)
+
+
+def _reachable() -> bool:
+    import urllib.request
+    try:
+        urllib.request.urlopen(OLLAMA_HOST, timeout=1)
+        return True
+    except Exception:
+        return False
+
+
+def ensure_portable_server() -> None:
+    """Portable mode only: start a private Ollama server (if one isn't already answering) that reads the
+    models kept inside the Jarvis folder. Does nothing in normal mode."""
+    if not config.PORTABLE or _reachable():
+        return
+    binary = _ollama_binary()
+    if not binary:
+        status("Portable mode: couldn't find the 'ollama' program. Put it in an 'ollama' folder next to Jarvis.")
+        return
+    import subprocess
+    env = {**os.environ, "OLLAMA_HOST": f"127.0.0.1:{config.PORTABLE_OLLAMA_PORT}",
+           "OLLAMA_MODELS": str(_PROJECT / "ollama-models")}
+    kw = {"stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL, "env": env}
+    if sys.platform == "win32":
+        kw["creationflags"] = subprocess.CREATE_NO_WINDOW
+    else:
+        kw["start_new_session"] = True
+    try:
+        subprocess.Popen([binary, "serve"], **kw)
+    except OSError as e:
+        status(f"Portable mode: couldn't start the ollama server: {e}")
+        return
+    for _ in range(40):
+        if _reachable():
+            status("Portable Ollama server started (models from the Jarvis folder).")
+            return
+        time.sleep(0.5)
+    status("Portable mode: the ollama server didn't come up in time.")
+
+
 class Brain:
     MAX_TURNS = 8  # remembered back-and-forths
 
@@ -68,6 +145,7 @@ class Brain:
         self.history: list[dict] = []
         self.models: set[str] = set()
         self._checked_at = 0.0
+        ensure_portable_server()
         if not self._find_models():
             status("Ollama isn't running - chat and coding are off for now, built-in commands still work. "
                    "(Jarvis will check again when you ask something.)")
@@ -77,9 +155,8 @@ class Brain:
     def _find_models(self) -> bool:
         self._checked_at = time.time()
         try:
-            import ollama
 
-            self.models = {m.model for m in ollama.list().models}
+            self.models = {m.model for m in _oll().list().models}
         except Exception:
             self.models = set()
         return bool(self.models)
@@ -114,13 +191,12 @@ class Brain:
 
     def _use(self, model: str) -> str:
         """Unload any other model before using this one, so two never sit in memory together."""
-        import ollama
 
         if self._loaded != model:
             try:
-                for running in ollama.ps().models:
+                for running in _oll().ps().models:
                     if running.model != _tag(model):
-                        ollama.generate(model=running.model, prompt="", keep_alive=0)
+                        _oll().generate(model=running.model, prompt="", keep_alive=0)
             except Exception:
                 pass
         self._loaded = model
@@ -152,14 +228,13 @@ class Brain:
 
     def ask(self, text: str, speak: Callable[[str], None], show_code: Callable[[str], None]) -> str:
         """Stream an answer. Prose goes to `speak` a sentence at a time; code blocks go to `show_code`."""
-        import ollama
 
         coding = bool(CODE_TOPIC.search(text))
         model = self._use(self.code_model if coding else self.chat_model)
         messages = [{"role": "system", "content": self.system_prompt(coding)}, *self.history,
                     {"role": "user", "content": text}]
         splitter = _ProseCodeSplitter(speak, show_code)
-        for chunk in ollama.chat(model=model, messages=messages, stream=True, keep_alive=KEEP_ALIVE,
+        for chunk in _oll().chat(model=model, messages=messages, stream=True, keep_alive=KEEP_ALIVE,
                                  options={"num_predict": 900 if coding else 220, "num_ctx": 4096},
                                  **self._extra(model)):
             splitter.feed(chunk.message.content or "")
@@ -170,24 +245,22 @@ class Brain:
 
     def summarize(self, request: str, output: str) -> str:
         """Turn command output into a short spoken answer to what the user asked."""
-        import ollama
 
         prompt = (f"The user asked: {request}\nA command was run and printed:\n{output[:3000]}\n\n"
                   "Answer the user's request in one or two short spoken sentences, based only on that output. "
                   "No markdown.")
         model = self._use(self._loaded or self.chat_model)  # whichever is already in memory, to avoid a reload
-        r = ollama.chat(model=model, messages=[{"role": "user", "content": prompt}], keep_alive=KEEP_ALIVE,
+        r = _oll().chat(model=model, messages=[{"role": "user", "content": prompt}], keep_alive=KEEP_ALIVE,
                         options={"num_predict": 120, "num_ctx": 4096}, **self._extra(model))
         return clean(r.message.content or "") or "Done. The output is on screen."
 
     def pick_command(self, text: str) -> str | None:
         """Map a loosely worded request ("I want to hear some jazz") onto a built-in command, or None."""
-        import ollama
 
         if not ACTION_HINT.search(text):
             return None
         model = self._use(self.chat_model)
-        r = ollama.chat(model=model, keep_alive=KEEP_ALIVE,
+        r = _oll().chat(model=model, keep_alive=KEEP_ALIVE,
                         messages=[{"role": "system", "content": PICK_COMMAND_PROMPT},
                                   {"role": "user", "content": text + " ->"}],
                         options={"temperature": 0, "num_predict": 30}, **self._extra(model))
@@ -200,7 +273,6 @@ class Brain:
     # -------------------------------------------------------------- terminal
     def make_command(self, request: str) -> tuple[str, str]:
         """Translate a request into one shell command. Returns (command, short explanation)."""
-        import ollama
 
         system = (
             f"You turn requests into a single {SHELL} command for {OS_NAME}. Commands run in the user's home "
@@ -210,7 +282,7 @@ class Brain:
         )
         schema = {"type": "object", "required": ["command", "explanation"],
                   "properties": {"command": {"type": "string"}, "explanation": {"type": "string"}}}
-        r = ollama.chat(model=self._use(self.code_model), format=schema, keep_alive=KEEP_ALIVE,
+        r = _oll().chat(model=self._use(self.code_model), format=schema, keep_alive=KEEP_ALIVE,
                         messages=[{"role": "system", "content": system}, {"role": "user", "content": request}],
                         options={"temperature": 0.1, "num_predict": 300}, **self._extra(self.code_model))
         data = json.loads(r.message.content)
@@ -218,10 +290,9 @@ class Brain:
 
     # ---------------------------------------------------------------- coding
     def _code(self, messages: list[dict], on_text: Callable[[str], None]) -> str:
-        import ollama
 
         text = ""
-        stream = ollama.chat(model=self._use(self.code_model), messages=messages, stream=True, keep_alive=KEEP_ALIVE,
+        stream = _oll().chat(model=self._use(self.code_model), messages=messages, stream=True, keep_alive=KEEP_ALIVE,
                              options={"num_predict": 3000, "num_ctx": 8192, "temperature": 0.2},
                              **self._extra(self.code_model))
         for chunk in stream:
