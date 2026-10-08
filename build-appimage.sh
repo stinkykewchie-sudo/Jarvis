@@ -71,9 +71,10 @@ DESK
 echo "6/6  Packaging with appimagetool..."
 tool="$work/appimagetool.AppImage"
 curl -fsSL -o "$tool" \
-  "https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage"
+  "https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage"
 chmod +x "$tool"
-ARCH=x86_64 "$tool" "$appdir" "$here/Jarvis-x86_64.AppImage"
+# --no-appstream skips the strict metadata validation (the cid-* errors); not needed for a personal app
+ARCH=x86_64 "$tool" --no-appstream "$appdir" "$here/Jarvis-x86_64.AppImage"
 
 cd "$here"; rm -rf "$work"
 echo
