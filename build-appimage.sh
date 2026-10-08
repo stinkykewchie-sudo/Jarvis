@@ -84,6 +84,10 @@ cat <<'NOTES'
 Run it:   ./Jarvis-x86_64.AppImage
 (or make it clickable in your file manager: Properties -> Permissions -> Allow executing as program.)
 
+If you get "AppImages require FUSE to run": Ubuntu 22.04+ doesn't ship FUSE 2 by default. Either run it
+without FUSE:   ./Jarvis-x86_64.AppImage --appimage-extract-and-run
+or install the library once:   sudo apt install libfuse2    (on Ubuntu 24.04: sudo apt install libfuse2t64)
+
 Before it fully works on a given machine:
   * Microphone needs PortAudio on the host:   sudo apt install libportaudio2   (dnf: portaudio, pacman: portaudio)
   * The window needs Tk. The bundled Python usually includes it; if the window won't open, run the AppImage
