@@ -8,10 +8,15 @@ import threading
 from pathlib import Path
 
 import numpy as np
-import sounddevice as sd
 
 import config
 from console import say_line, status
+
+try:
+    import sounddevice as sd  # needs PortAudio; without it Piper playback is off and we use the system voice
+except Exception as e:  # OSError if the PortAudio library is missing, ImportError if the package isn't there
+    sd = None
+    status(f"(audio output library not available, using the system voice: {e})")
 
 VOICES_DIR = Path(__file__).with_name("voices")
 
@@ -42,6 +47,8 @@ class Mouth:
         threading.Thread(target=self._run, daemon=True).start()
 
     def _load_engine(self):
+        if sd is None:  # no audio playback library -> use the system voice (espeak-ng / SAPI)
+            return None
         model = ensure_piper_voice()
         if model:
             try:

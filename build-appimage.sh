@@ -38,7 +38,7 @@ echo "3/6  Unpacking it into the AppDir..."
 ./python.AppImage --appimage-extract >/dev/null
 mv squashfs-root "$appdir"
 # find the real python binary (the folder may be opt/python3.12 or a patch-versioned one)
-py="$(find "$appdir/opt" -maxdepth 2 -type f -name 'python3.[0-9]*' 2>/dev/null \
+py="$(find "$appdir/opt" -maxdepth 3 -type f -name 'python3.[0-9]*' 2>/dev/null \
       | grep -E '/python3\.[0-9]+$' | head -1)"
 [ -n "$py" ] && [ -x "$py" ] || { echo "Bundled python not found under $appdir/opt"; find "$appdir/opt" -maxdepth 2 -name 'python3*'; exit 1; }
 echo "     using $py"
@@ -56,6 +56,9 @@ cp "$here/jarvis.png" "$appdir/opt/jarvis/jarvis.png" 2>/dev/null || true
 # AppRun finds the bundled Python and Tcl/Tk at runtime (layout varies by base image), sets up their
 # environment, and - crucially for a windowed app with no terminal - shows any startup error in a popup
 # and writes it to ~/jarvis-appimage.log, so you can read what went wrong without a console.
+# The base image ships AppRun as a symlink into usr/bin, so delete it first - otherwise "cat >" would write
+# through the link and our launcher would resolve its own location to the wrong folder.
+rm -f "$appdir/AppRun"
 cat > "$appdir/AppRun" <<'APPRUN'
 #!/bin/bash
 HERE="$(dirname "$(readlink -f "$0")")"
