@@ -215,30 +215,22 @@ class JarvisGUI:
             self.listening = False
             self.root.after(0, lambda: self.mic_btn.config(text="🎤 Listen", fg=FG))
             return
-        self.status("Listening...")
-        awake_until = 0.0
+        self.status("Listening... just talk")
         while self.listening:
             if self.busy:  # don't record while Jarvis is working or speaking
                 time.sleep(0.15)
                 continue
-            awake = self.pending_question or time.time() < awake_until
-            heard = ears.listen(wake_check=None if awake else jarvis.WAKE_WORD.search)
+            heard = ears.listen()  # Listen is an explicit button, so every utterance is for Jarvis
             if not heard or not self.listening:
                 continue
             if self.pending_question:
                 self.root.after(0, lambda h=heard: (self.you(h), self._set_answer(h)))
                 continue
+            # drop a leading "Jarvis" if the user says it out of habit, otherwise use the whole phrase
             match = jarvis.WAKE_WORD.search(heard)
-            if match:
-                command = heard[match.end():].strip() or heard[:match.start()].strip()
-            elif time.time() < awake_until and jarvis.FOLLOW_UP.match(skills.normalise(heard)):
-                command = heard
-            else:
-                self.status(f"(heard: {heard})")
-                continue
+            command = (heard[match.end():].strip() or heard[:match.start()].strip()) if match else heard
             if command:
                 self.root.after(0, lambda c=command: self._feed(c, typed=False))
-                awake_until = time.time() + config.FOLLOW_UP_SECONDS
 
     def _set_answer(self, text: str) -> None:
         self._answer = text
