@@ -28,9 +28,13 @@ def _writable(path: Path) -> bool:
         return False
 
 
+# Inside an AppImage the program folder is a temporary mount/extraction (sometimes writable, sometimes not),
+# so always use a persistent per-user folder there. AppRun sets JARVIS_APPIMAGE; the runtime sets APPIMAGE.
+_IN_APPIMAGE = bool(os.environ.get("JARVIS_APPIMAGE") or os.environ.get("APPIMAGE"))
+
 if os.environ.get("JARVIS_DATA"):
     DATA_DIR = Path(os.environ["JARVIS_DATA"]).expanduser()
-elif _writable(APP_DIR):
+elif not _IN_APPIMAGE and _writable(APP_DIR):
     DATA_DIR = APP_DIR
 else:
     DATA_DIR = Path.home() / ".local" / "share" / "Jarvis"

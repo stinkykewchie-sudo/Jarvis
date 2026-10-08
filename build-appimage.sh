@@ -80,6 +80,7 @@ cat > "$appdir/AppRun" <<'APPRUN'
 #!/bin/bash
 HERE="$(dirname "$(readlink -f "$0")")"
 export APPDIR="$HERE"
+export JARVIS_APPIMAGE=1   # tells Jarvis to keep its data in ~/.local/share/Jarvis, not this temp folder
 LOG="$HOME/jarvis-appimage.log"
 
 show_error() {
@@ -107,6 +108,16 @@ TCLDIR="$(find "$HERE" -maxdepth 6 -type d -name 'tcl8.*' 2>/dev/null | head -1)
 TKDIR="$(find "$HERE" -maxdepth 6 -type d -name 'tk8.*' 2>/dev/null | head -1)"
 [ -n "$TCLDIR" ] && export TCL_LIBRARY="$TCLDIR"
 [ -n "$TKDIR" ] && export TK_LIBRARY="$TKDIR"
+
+# HTTPS certificates, so first-run model/voice downloads can verify (the bundled Python has no CA path)
+for ca in /etc/ssl/certs/ca-certificates.crt /etc/pki/tls/certs/ca-bundle.crt /etc/ssl/cert.pem; do
+    [ -f "$ca" ] && export SSL_CERT_FILE="$ca" REQUESTS_CA_BUNDLE="$ca" && break
+done
+[ -d /etc/ssl/certs ] && export SSL_CERT_DIR=/etc/ssl/certs
+if [ -z "${SSL_CERT_FILE:-}" ]; then  # fall back to the bundled certifi CA bundle
+    caf="$("$PYBIN" -c 'import certifi; print(certifi.where())' 2>/dev/null)"
+    [ -n "$caf" ] && export SSL_CERT_FILE="$caf" REQUESTS_CA_BUNDLE="$caf"
+fi
 
 if [ "${1:-}" = "--selftest" ]; then  # used by build-appimage.sh to verify the bundle; prints one line
     "$PYBIN" -c "import tkinter; r=tkinter.Tk(); r.destroy(); print('SELFTEST_OK: the window toolkit works')" \

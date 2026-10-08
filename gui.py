@@ -257,8 +257,16 @@ class JarvisGUI:
                 pystray.MenuItem("Hide", lambda: self.root.after(0, self.root.withdraw)),
                 pystray.MenuItem("Quit", lambda: self.root.after(0, self._quit)),
             )
-            self.tray = pystray.Icon("jarvis", image, "Jarvis", menu)
-            threading.Thread(target=self.tray.run, daemon=True).start()
+            tray = pystray.Icon("jarvis", image, "Jarvis", menu)
+
+            def run_tray():
+                try:
+                    tray.run()
+                except Exception:  # e.g. no system-tray manager (minimal desktops, WSL)
+                    self.tray = None  # so closing the window quits instead of hiding into nothing
+
+            self.tray = tray
+            threading.Thread(target=run_tray, daemon=True).start()
         except Exception:
             self.tray = None  # no tray available; the window's close button will quit instead
 
