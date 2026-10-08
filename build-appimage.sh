@@ -21,7 +21,9 @@ appdir="$work/Jarvis.AppDir"
 export APPIMAGE_EXTRACT_AND_RUN=1   # let AppImages run without FUSE
 
 echo "1/6  Clean build dir..."
-rm -rf "$work"; mkdir -p "$work"; cd "$work"
+rm -rf "$work"; mkdir -p "$work"
+rm -f "$here/Jarvis-x86_64.AppImage"   # remove any old build so a stale one can't be mistaken for success
+cd "$work"
 
 echo "2/6  Finding a portable Python $PYMM AppImage..."
 api="https://api.github.com/repos/niess/python-appimage/releases/tags/python${PYMM}"
@@ -86,6 +88,12 @@ TKDIR="$(find "$HERE" -maxdepth 6 -type d -name 'tk8.*' 2>/dev/null | head -1)"
 [ -n "$TCLDIR" ] && export TCL_LIBRARY="$TCLDIR"
 [ -n "$TKDIR" ] && export TK_LIBRARY="$TKDIR"
 
+if [ "${1:-}" = "--selftest" ]; then  # used by build-appimage.sh to verify the bundle; prints one line
+    "$PYBIN" -c "import tkinter; r=tkinter.Tk(); r.destroy(); print('SELFTEST_OK: the window toolkit works')" \
+        || echo "SELFTEST_TK_FAIL (see the error just above)"
+    exit 0
+fi
+
 "$PYBIN" "$HERE/opt/jarvis/gui.py" "$@" 2>"$LOG" && exit 0
 show_error "Jarvis couldn't start. Details saved to $LOG
 
@@ -114,6 +122,15 @@ chmod +x "$tool"
 ARCH=x86_64 "$tool" --no-appstream "$appdir" "$here/Jarvis-x86_64.AppImage"
 
 cd "$here"; rm -rf "$work"
+chmod +x "$here/Jarvis-x86_64.AppImage"
+
+echo
+echo "Verifying the bundle (this runs the AppImage's own launcher once)..."
+verdict="$("$here/Jarvis-x86_64.AppImage" --appimage-extract-and-run --selftest 2>&1 | grep -E 'SELFTEST' | tail -1)"
+[ -n "$verdict" ] || verdict="SELFTEST produced no result - run ./Jarvis-x86_64.AppImage --appimage-extract-and-run to see what happens"
+echo "=================================================================="
+echo "  RESULT: ${verdict}"
+echo "=================================================================="
 echo
 echo "Done:  $here/Jarvis-x86_64.AppImage"
 cat <<'NOTES'
